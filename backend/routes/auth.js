@@ -1,0 +1,173 @@
+const express = require('express');
+const router  = express.Router();
+const crypto  = require('crypto');
+const { v4: uuidv4 } = require('uuid');
+const { supabaseAdmin } = require('../services/supabase');
+const { sendOTP, sendWelcomeDoctor } = require('../services/resend');
+const auth = require('../middleware/auth');
+
+// Temporary OTP store: email → { otp, expiresAt, name, role }
+const otpStore = new Map();
+
+// ─── POST /api/auth/send-otp ─────────────────────────────────────────────────
+router.post('/send-otp', async (req, res, next) => {
+  try {
+    const { email, name, role } = req.body;
+    if (!email || !name) return res.status(400).json({ error: 'email and name required' });
+
+    // Validate college email for students
+    if (role === 'student') {
+      const lower = email.toLowerCase();
+      const valid = lower.endsWith('.ac.in') || lower.endsWith('.edu') ||
+                    lower.includes('.edu.');
+      if (!valid) return res.status(400).json({ error: 'Must use a college email (.ac.in or .edu)' });
+    }
+
+    // Check not already registered
+    const { data: existing } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('email', email.toLowerCase())
+      .single();
+    if (existing) return res.status(409).json({ error: 'Email already registered' });
+
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    otpStore.set(email.toLowerCase(), {
+      otp,
+      name,
+      role,
+      expiresAt: Date.now() + 10 * 60 * 1000, // 10 min
+    });
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[DEV] OTP for ${email}: ${otp}`);
+    }
+    await sendOTP(email, otp);
+
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/auth/verify-otp ───────────────────────────────────────────────
+router.post('/verify-otp', async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+    const lower = email?.toLowerCase();
+    const entry = otpStore.get(lower);
+
+    if (!entry || entry.otp !== otp || Date.now() > entry.expiresAt) {
+      return res.status(400).json({ error: 'Invalid or expired code' });
+    }
+    otpStore.delete(lower);
+
+    // Generate a unique handle
+    const slug  = entry.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const rand  = Math.floor(100 + Math.random() * 900);
+    const handle = `${slug}-${rand}`;
+
+    // Create Supabase Auth user with a temporary password
+    const tempPassword = uuidv4();
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: lower,
+      password: tempPassword,
+      email_confirm: true,
+    });
+    if (authError) throw authError;
+
+    // Create profile row
+    const college = lower.endsWith('.ac.in') ? lower.split('@')[1] : null;
+    await supabaseAdmin.from('users').insert({
+      id: authData.user.id,
+      email: lower,
+      full_name: entry.name,
+      role: entry.role,
+      status: entry.role === 'student' ? 'verified_student' : 'pending_verification',
+      college,
+      handle,
+    });
+
+    res.json({ ok: true, isNewUser: true, tempPassword });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/auth/register-doctor ──────────────────────────────────────────
+router.post('/register-doctor', async (req, res, next) => {
+  try {
+    const { email, fullName, mrn, specialty, hospital, yearsExperience, idPhotoUrl } = req.body;
+    if (!email || !fullName || !mrn || !specialty) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const lower = email.toLowerCase();
+    const { data: existing } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('email', lower)
+      .single();
+    if (existing) return res.status(409).json({ error: 'Email already registered' });
+
+    const slug   = fullName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const handle = `dr-${slug}-${Math.floor(100 + Math.random() * 900)}`;
+
+    const tempPassword = uuidv4();
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: lower,
+      password: tempPassword,
+      email_confirm: true,
+    });
+    if (authError) throw authError;
+
+    await supabaseAdmin.from('users').insert({
+      id: authData.user.id,
+      email: lower,
+      full_name: fullName,
+      role: 'doctor',
+      status: 'pending_verification',
+      mrn,
+      specialty,
+      hospital,
+      years_experience: yearsExperience,
+      id_photo_url: idPhotoUrl,
+      handle,
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/auth/complete-profile ─────────────────────────────────────────
+router.post('/complete-profile', auth, async (req, res, next) => {
+  try {
+    const { academicYear, city, state, bio } = req.body;
+    await supabaseAdmin
+      .from('users')
+      .update({ academic_year: academicYear, city, state, bio })
+      .eq('id', req.user.id);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── GET /api/auth/me ─────────────────────────────────────────────────────────
+router.get('/me', auth, async (req, res, next) => {
+  try {
+    const { data: user, error } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .eq('id', req.user.id)
+      .single();
+    if (error) throw error;
+    res.json({ user });
+  } catch (err) {
+    next(err);
+  }
+});
+
+module.exports = router;
