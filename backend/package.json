@@ -5,7 +5,12 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "test": "node tests/matching.test.js"
+  },
+  "engines": {
+    "node": ">=20.x",
+    "npm": ">=10.x"
   },
   "type": "commonjs",
   "dependencies": {
@@ -15,18 +20,19 @@
     "dotenv": "^16.4.0",
     "express": "^4.19.0",
     "express-rate-limit": "^7.3.0",
+    "firebase-admin": "^12.0.0",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.0",
     "livekit-server-sdk": "^2.5.0",
+    "multer": "^2.0.0",
     "node-cron": "^3.0.0",
     "razorpay": "^2.9.0",
     "resend": "^3.2.0",
     "socket.io": "^4.7.0",
-    "firebase-admin": "^12.0.0",
-    "multer": "^2.0.0",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0"
+    "nodemon": "^3.1.0",
+    "socket.io-client": "^4.8.3"
   }
 }

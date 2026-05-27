@@ -128,6 +128,12 @@ async function createSession(io, socketId1, socketId2, data1, data2) {
     console.error('Failed to persist session:', e);
   }
 
+  // Join both sockets to the room so socket.to(roomId) relay events work
+  const s1 = io.sockets.sockets.get(socketId1);
+  const s2 = io.sockets.sockets.get(socketId2);
+  if (s1) s1.join(roomId);
+  if (s2) s2.join(roomId);
+
   // Notify both users via socket (they may be in the app)
   io.to(socketId1).emit('match-found', {
     roomId,
