@@ -43,7 +43,11 @@ class _StudentRegisterScreenState extends State<StudentRegisterScreen> {
       if (!mounted) return;
       context.go('/register/otp', extra: _emailCtr.text.trim().toLowerCase());
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Could not reach server. Check your connection and try again.');
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

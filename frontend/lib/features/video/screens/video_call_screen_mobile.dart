@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/services/api_service.dart';
 import '../../../shared/services/socket_service.dart';
+import '../../../shared/widgets/disclaimer_overlay.dart';
 
 /// LiveKit WebRTC video call screen.
 /// Connects to the LiveKit room identified by [roomId] after fetching
@@ -52,6 +53,9 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   Timer? _overlayTimer;
   static const _freeMinutes = 30;
   bool   _warningShown = false;
+
+  // ── Disclaimer banner ─────────────────────────────────────────────────────────
+  bool   _showDisclaimer = false;
 
   // ── Lifecycle ────────────────────────────────────────────────────────────────
 
@@ -116,7 +120,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
       await _room.localParticipant?.setCameraEnabled(true);
       await _room.localParticipant?.setMicrophoneEnabled(true);
 
-      if (mounted) setState(() { _connecting = false; _connected = true; });
+      if (mounted) setState(() { _connecting = false; _connected = true; _showDisclaimer = true; });
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -397,6 +401,19 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                 ),
               ),
             ),
+
+            // ── Disclaimer banner ─────────────────────────────────────────
+            if (_showDisclaimer)
+              Positioned(
+                top: MediaQuery.of(context).padding.top,
+                left: 0,
+                right: 0,
+                child: DisclaimerOverlay(
+                  variant: DisclaimerVariant.videoCall,
+                  onDismiss: () =>
+                      setState(() => _showDisclaimer = false),
+                ),
+              ),
 
             // ── Top overlay (fades after 3 s) ─────────────────────────────
             AnimatedOpacity(

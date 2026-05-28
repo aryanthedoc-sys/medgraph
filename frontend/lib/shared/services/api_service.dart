@@ -9,9 +9,10 @@ class ApiService {
   ApiService._();
 
   // Set BACKEND_URL at build time: --dart-define=BACKEND_URL=https://...
+  // Defaults to the production Render URL so release builds work without flags.
   static const String _base = String.fromEnvironment(
     'BACKEND_URL',
-    defaultValue: 'http://localhost:3000',
+    defaultValue: 'https://medgraph-backend-2py8.onrender.com',
   );
 
   static String get _token =>

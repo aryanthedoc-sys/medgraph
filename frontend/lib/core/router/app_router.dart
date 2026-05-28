@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -19,6 +20,9 @@ import '../../features/leaderboard/screens/leaderboard_screen.dart';
 import '../../features/search/screens/search_screen.dart';
 import '../../features/payments/screens/upgrade_screen.dart';
 import '../../features/profile/screens/edit_profile_screen.dart';
+import '../../features/landing/screens/landing_screen.dart';
+import '../../features/legal/screens/terms_screen.dart';
+import '../../features/legal/screens/privacy_screen.dart';
 import '../../shared/services/notification_service.dart';
 import '../scaffold/main_scaffold.dart';
 
@@ -29,15 +33,28 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final isLoggedIn =
           Supabase.instance.client.auth.currentSession != null;
-      final isAuthRoute = state.matchedLocation.startsWith('/register') ||
-          state.matchedLocation == '/onboarding' ||
-          state.matchedLocation == '/';
+      final loc = state.matchedLocation;
+      final isPublicRoute = loc.startsWith('/register') ||
+          loc == '/onboarding' ||
+          loc == '/' ||
+          loc.startsWith('/legal') ||
+          loc.startsWith('/dr/');
 
-      if (!isLoggedIn && !isAuthRoute) return '/';
+      if (!isLoggedIn && !isPublicRoute) return '/';
       return null;
     },
     routes: [
-      GoRoute(path: '/', builder: (_, __) => const SplashScreen()),
+      GoRoute(
+        path: '/',
+        builder: (_, __) {
+          if (kIsWeb) {
+            final isLoggedIn =
+                Supabase.instance.client.auth.currentSession != null;
+            if (!isLoggedIn) return const LandingScreen();
+          }
+          return const SplashScreen();
+        },
+      ),
       GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
       GoRoute(path: '/register', builder: (_, __) => const RegisterChoiceScreen()),
       GoRoute(path: '/register/student', builder: (_, __) => const StudentRegisterScreen()),
@@ -50,6 +67,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/register/doctor', builder: (_, __) => const DoctorRegisterScreen()),
       GoRoute(path: '/register/profile-setup', builder: (_, __) => const ProfileSetupScreen()),
+
+      // Legal screens — public, no auth required
+      GoRoute(path: '/legal/terms', builder: (_, __) => const TermsScreen()),
+      GoRoute(path: '/legal/privacy', builder: (_, __) => const PrivacyScreen()),
 
       // Authenticated shell with bottom nav
       ShellRoute(
@@ -72,7 +93,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const EditProfileScreen(),
       ),
 
-      // Public routes (no auth required)
+      // Public profile — no auth required
       GoRoute(
         path: '/dr/:handle',
         builder: (_, state) {

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
@@ -55,6 +56,41 @@ class RegisterChoiceScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 8),
+              Center(
+                child: RichText(
+                  textAlign: TextAlign.center,
+                  text: TextSpan(
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark
+                          ? AppColors.darkSecondary
+                          : AppColors.lightSecondary,
+                    ),
+                    children: [
+                      const TextSpan(text: 'By continuing you agree to our '),
+                      TextSpan(
+                        text: 'Terms of Service',
+                        style: const TextStyle(
+                          decoration: TextDecoration.underline,
+                        ),
+                        recognizer: TapGestureRecognizer()
+                          ..onTap = () => context.push('/legal/terms'),
+                      ),
+                      const TextSpan(text: ' and '),
+                      TextSpan(
+                        text: 'Privacy Policy',
+                        style: const TextStyle(
+                          decoration: TextDecoration.underline,
+                        ),
+                        recognizer: TapGestureRecognizer()
+                          ..onTap = () => context.push('/legal/privacy'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
             ],
           ),
         ),

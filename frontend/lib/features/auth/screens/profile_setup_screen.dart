@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/mg_button.dart';
 import '../../../shared/widgets/mg_text_field.dart';
+import '../../../shared/widgets/disclaimer_overlay.dart';
 import '../../../shared/services/api_service.dart';
 
 class ProfileSetupScreen extends ConsumerStatefulWidget {
@@ -39,7 +41,21 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
         'bio': _bioCtr.text.trim(),
       });
       if (!mounted) return;
-      context.go('/home');
+      final prefs = await SharedPreferences.getInstance();
+      final accepted = prefs.getBool('disclaimer_accepted') ?? false;
+      if (!mounted) return;
+      if (!accepted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const DisclaimerOverlay(
+              variant: DisclaimerVariant.onboarding),
+        ).then((_) {
+          if (mounted) context.go('/home');
+        });
+      } else {
+        context.go('/home');
+      }
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } finally {

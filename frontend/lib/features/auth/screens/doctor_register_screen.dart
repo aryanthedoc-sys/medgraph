@@ -24,6 +24,7 @@ class _DoctorRegisterScreenState extends State<DoctorRegisterScreen> {
   String? _docPhotoPath;
   bool _loading = false;
   String? _error;
+  bool _professionalDisclaimer = false;
 
   static const _specialties = [
     'General Medicine', 'Surgery', 'Paediatrics', 'Obstetrics & Gynaecology',
@@ -54,7 +55,8 @@ class _DoctorRegisterScreenState extends State<DoctorRegisterScreen> {
       _emailCtr.text.trim().isNotEmpty &&
       _mrnCtr.text.trim().isNotEmpty &&
       _specialty != null &&
-      _docPhotoPath != null;
+      _docPhotoPath != null &&
+      _professionalDisclaimer;
 
   Future<void> _submit() async {
     setState(() { _error = null; _loading = true; });
@@ -232,7 +234,55 @@ class _DoctorRegisterScreenState extends State<DoctorRegisterScreen> {
                       style: AppTextStyles.footnote.copyWith(color: AppColors.danger)),
                 ),
               ],
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+              // Professional responsibility disclaimer
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF8E1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: AppColors.warning.withValues(alpha: 0.4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.warning_amber_outlined,
+                            size: 18, color: AppColors.warning),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Professional Responsibility',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'As a registered medical practitioner on MedGraph, you confirm:\n'
+                      '• All case discussions are purely educational\n'
+                      '• You will not use MedGraph to establish doctor-patient relationships\n'
+                      '• You accept personal professional liability for advice given as a medical practitioner',
+                      style: TextStyle(fontSize: 13, height: 1.5),
+                    ),
+                  ],
+                ),
+              ),
+              CheckboxListTile(
+                value: _professionalDisclaimer,
+                onChanged: (v) =>
+                    setState(() => _professionalDisclaimer = v ?? false),
+                activeColor: isDark ? Colors.white : Colors.black,
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  'I understand my professional responsibilities on this platform',
+                  style: AppTextStyles.subheadline.copyWith(color: text),
+                ),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              const SizedBox(height: 12),
               MGButton(
                 label: 'Submit for review',
                 onPressed: _canSubmit ? _submit : null,

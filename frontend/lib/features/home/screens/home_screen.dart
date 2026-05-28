@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../shared/widgets/mg_button.dart';
 import '../../../shared/widgets/mg_card.dart';
+import '../../../shared/widgets/disclaimer_overlay.dart';
 import '../widgets/streak_card.dart';
 import '../widgets/mcq_card.dart';
 import '../widgets/filter_sheet.dart';
@@ -26,6 +28,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
     _loadOnlineCount();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkDisclaimer());
+  }
+
+  Future<void> _checkDisclaimer() async {
+    final prefs = await SharedPreferences.getInstance();
+    final accepted = prefs.getBool('disclaimer_accepted') ?? false;
+    if (!accepted && mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const DisclaimerOverlay(
+            variant: DisclaimerVariant.onboarding),
+      );
+    }
   }
 
   Future<void> _loadOnlineCount() async {

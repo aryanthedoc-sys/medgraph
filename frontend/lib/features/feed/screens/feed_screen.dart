@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/services/api_service.dart';
+import '../../../shared/widgets/disclaimer_overlay.dart';
+import '../../../shared/utils/content_safety.dart';
 
 class FeedScreen extends ConsumerStatefulWidget {
   const FeedScreen({super.key});
@@ -84,13 +87,29 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
   }
 
   void _showCreatePost(BuildContext context) {
+    final type = ['rounds', 'cases', 'life'][_tabCtrl.index];
+    if (type == 'cases') {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        isDismissible: false,
+        backgroundColor: Colors.transparent,
+        builder: (_) => DisclaimerOverlay(
+          variant: DisclaimerVariant.casePost,
+          onConfirm: () => _showCreatePostSheet(context, type),
+        ),
+      );
+    } else {
+      _showCreatePostSheet(context, type);
+    }
+  }
+
+  void _showCreatePostSheet(BuildContext context, String type) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _CreatePostSheet(
-        defaultType: ['rounds', 'cases', 'life'][_tabCtrl.index],
-      ),
+      builder: (_) => _CreatePostSheet(defaultType: type),
     );
   }
 }
@@ -249,6 +268,8 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
   final _contentCtrl = TextEditingController();
   String? _topicTag;
   bool _loading = false;
+  List<String> _safetyWarnings = [];
+  Timer? _safetyDebounce;
 
   static const _topics = [
     'Cardiology', 'Medicine', 'Surgery', 'Paediatrics',
@@ -263,8 +284,22 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
 
   @override
   void dispose() {
+    _safetyDebounce?.cancel();
     _contentCtrl.dispose();
     super.dispose();
+  }
+
+  void _onContentChanged(String text) {
+    setState(() {});
+    _safetyDebounce?.cancel();
+    _safetyDebounce = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        setState(() {
+          _safetyWarnings =
+              ContentSafety.checkForPatientIdentifiers(text);
+        });
+      }
+    });
   }
 
   Future<void> _post() async {
@@ -350,8 +385,38 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
                   borderSide: BorderSide.none,
                 ),
               ),
-              onChanged: (_) => setState(() {}),
+              onChanged: _onContentChanged,
             ),
+            if (_safetyWarnings.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: AppColors.warning.withValues(alpha: 0.4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '⚠️ This post may contain patient identifiers. Please review before posting.',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF856404)),
+                    ),
+                    const SizedBox(height: 6),
+                    ..._safetyWarnings.map((w) => Text(
+                          '• $w',
+                          style: const TextStyle(
+                              fontSize: 12, color: Color(0xFF856404)),
+                        )),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             // Topic tag
             Wrap(

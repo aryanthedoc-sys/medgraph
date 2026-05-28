@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_colors.dart';
 import '../../shared/widgets/responsive_layout.dart';
+import '../../shared/widgets/disclaimer_overlay.dart';
 
 /// Shell that wraps authenticated screens with bottom nav (mobile)
 /// or left sidebar (desktop ≥ 600px).
@@ -195,6 +196,61 @@ class _DesktopScaffold extends StatelessWidget {
                     ),
                   );
                 }),
+                const Spacer(),
+                // Legal links + disclaimer footer
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => context.push('/legal/terms'),
+                            child: Text(
+                              'Terms',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark
+                                    ? AppColors.darkTertiary
+                                    : AppColors.lightTertiary,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '  ·  ',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark
+                                  ? AppColors.darkTertiary
+                                  : AppColors.lightTertiary,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => context.push('/legal/privacy'),
+                            child: Text(
+                              'Privacy',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark
+                                    ? AppColors.darkTertiary
+                                    : AppColors.lightTertiary,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      DisclaimerOverlay(
+                        variant: DisclaimerVariant.footer,
+                        onDismiss: () => context.push('/legal/terms'),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
