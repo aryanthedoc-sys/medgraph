@@ -15,6 +15,7 @@ function initSocket(io) {
     console.log(`Socket connected: ${socket.id}`);
 
     socket.on('join-queue', async (data) => {
+      console.log('JOIN QUEUE', JSON.stringify(data));
       const { userId, mode, filters } = data;
       if (!userId) return;
 
