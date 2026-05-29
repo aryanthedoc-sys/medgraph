@@ -25,6 +25,7 @@ const notificationsRoutes  = require('./routes/notifications');
 require('./cron/jobs'); // register all cron jobs
 
 const app    = express();
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 
 // ─── Socket.io ───────────────────────────────────────────────────────────────

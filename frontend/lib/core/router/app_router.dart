@@ -21,6 +21,9 @@ import '../../features/search/screens/search_screen.dart';
 import '../../features/payments/screens/upgrade_screen.dart';
 import '../../features/profile/screens/edit_profile_screen.dart';
 import '../../features/landing/screens/landing_screen.dart';
+import '../../features/landing/screens/about_screen.dart';
+import '../../features/landing/screens/blog_screen.dart';
+import '../../features/landing/screens/contact_screen.dart';
 import '../../features/legal/screens/terms_screen.dart';
 import '../../features/legal/screens/privacy_screen.dart';
 import '../../shared/services/notification_service.dart';
@@ -38,7 +41,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           loc == '/onboarding' ||
           loc == '/' ||
           loc.startsWith('/legal') ||
-          loc.startsWith('/dr/');
+          loc.startsWith('/dr/') ||
+          loc == '/about' ||
+          loc == '/blog' ||
+          loc == '/contact';
 
       if (!isLoggedIn && !isPublicRoute) return '/';
       return null;
@@ -71,6 +77,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Legal screens — public, no auth required
       GoRoute(path: '/legal/terms', builder: (_, __) => const TermsScreen()),
       GoRoute(path: '/legal/privacy', builder: (_, __) => const PrivacyScreen()),
+
+      // Company pages — public, no auth required
+      GoRoute(path: '/about',   builder: (_, __) => const AboutScreen()),
+      GoRoute(path: '/blog',    builder: (_, __) => const BlogScreen()),
+      GoRoute(path: '/contact', builder: (_, __) => const ContactScreen()),
 
       // Authenticated shell with bottom nav
       ShellRoute(

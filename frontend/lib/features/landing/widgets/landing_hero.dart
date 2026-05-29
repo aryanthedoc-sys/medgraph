@@ -303,7 +303,7 @@ class _LandingHeroState extends State<LandingHero>
                 borderRadius: BorderRadius.circular(14),
               ),
               child: const Text(
-                "Get early access — it's free",
+                'Start for free →',
                 style: TextStyle(
                     color: Colors.white,
                     fontSize: 15,

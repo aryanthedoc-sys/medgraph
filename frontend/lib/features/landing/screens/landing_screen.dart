@@ -159,6 +159,7 @@ class _NavbarState extends State<_Navbar> {
                   _NavLink('Features', () => _scrollTo(widget.featuresKey)),
                   _NavLink('Doctors',  () => _scrollTo(widget.doctorsKey)),
                   _NavLink('Pricing',  () => _scrollTo(widget.pricingKey)),
+                  _NavLink('Join',     () => context.go('/register')),
                   const SizedBox(width: 8),
                   TextButton(
                     onPressed: () => context.go('/onboarding'),
@@ -201,6 +202,10 @@ class _NavbarState extends State<_Navbar> {
                 _MobileNavItem('Pricing', () {
                   setState(() => _menuOpen = false);
                   _scrollTo(widget.pricingKey);
+                }),
+                _MobileNavItem('Join', () {
+                  setState(() => _menuOpen = false);
+                  context.go('/register');
                 }),
                 _MobileNavItem('Sign in', () {
                   setState(() => _menuOpen = false);
@@ -270,7 +275,7 @@ class _EarlyAccessButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(22),
         ),
         child: const Text(
-          'Get early access',
+          'Start free',
           style: TextStyle(
               color: Colors.white,
               fontSize: 13,

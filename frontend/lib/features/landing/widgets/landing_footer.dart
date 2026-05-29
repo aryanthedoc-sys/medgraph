@@ -1,9 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LandingFooter extends StatelessWidget {
   const LandingFooter({super.key, required this.isMobile});
   final bool isMobile;
+
+  void _nav(BuildContext context, String route) {
+    final isLoggedIn = Supabase.instance.client.auth.currentSession != null;
+    final protectedRoutes = {
+      '/match', '/feed', '/sessions', '/leaderboard',
+      '/upgrade', '/profile', '/rankings/weekly',
+    };
+    if (protectedRoutes.contains(route) && !isLoggedIn) {
+      context.push('/onboarding');
+    } else {
+      context.push(route);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,35 +35,29 @@ class LandingFooter extends StatelessWidget {
                 ? _mobileLayout(context)
                 : _desktopLayout(context),
           ),
-          Container(height: 0.5, color: Colors.white.withValues(alpha: 0.08)),
-          Padding(
-            padding: EdgeInsets.symmetric(
-              vertical: 24,
-              horizontal: isMobile ? 24 : 80,
+          // Copyright bar
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 32),
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
             ),
             child: Column(
               children: [
-                Text(
+                const Text(
                   '© 2025 MedGraph · Built in India 🇮🇳',
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.white.withValues(alpha: 0.4)),
+                  style: TextStyle(color: Color(0x61FFFFFF), fontSize: 13),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Made for 2.3 million MBBS students',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withValues(alpha: 0.3)),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'MedGraph is educational only. Not medical advice.',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withValues(alpha: 0.25)),
+                const SizedBox(height: 6),
+                const Text(
+                  'MedGraph is an educational platform. '
+                  'Not medical advice. Not telemedicine.',
+                  style: TextStyle(color: Color(0x3DFFFFFF), fontSize: 12),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -88,24 +96,24 @@ class LandingFooter extends StatelessWidget {
           ),
         ),
         _FooterColumn('Product', [
-          _FooterLink('Matching', () {}),
-          _FooterLink('Feed', () {}),
-          _FooterLink('Sessions', () {}),
-          _FooterLink('Leaderboard', () {}),
-          _FooterLink('Upgrade to Pro', () => context.go('/upgrade')),
+          _FooterLink('Matching',       () => _nav(context, '/roulette')),
+          _FooterLink('Feed',           () => _nav(context, '/feed')),
+          _FooterLink('Sessions',       () => _nav(context, '/sessions')),
+          _FooterLink('Leaderboard',    () => _nav(context, '/leaderboard')),
+          _FooterLink('Upgrade to Pro', () => _nav(context, '/upgrade')),
         ]),
         _FooterColumn('Community', [
-          _FooterLink('For Students', () {}),
-          _FooterLink('For Doctors', () {}),
-          _FooterLink('MedGraph Fellows', () {}),
-          _FooterLink('Creator Program', () {}),
+          _FooterLink('For Students',       () => context.push('/register')),
+          _FooterLink('For Doctors',        () => context.push('/register')),
+          _FooterLink('MedGraph Fellows',   () => _nav(context, '/rankings/weekly')),
+          _FooterLink('Creator Program',    () => _nav(context, '/profile')),
         ]),
         _FooterColumn('Company', [
-          _FooterLink('About', () {}),
-          _FooterLink('Blog', () {}),
-          _FooterLink('Contact', () {}),
-          _FooterLink('Terms of Service', () => context.push('/legal/terms')),
-          _FooterLink('Privacy Policy', () => context.push('/legal/privacy')),
+          _FooterLink('About',           () => context.push('/about')),
+          _FooterLink('Blog',            () => context.push('/blog')),
+          _FooterLink('Contact',         () => context.push('/contact')),
+          _FooterLink('Terms of Service',() => context.push('/legal/terms')),
+          _FooterLink('Privacy Policy',  () => context.push('/legal/privacy')),
         ]),
       ],
     );
@@ -132,43 +140,28 @@ class LandingFooter extends StatelessWidget {
           spacing: 16,
           runSpacing: 16,
           children: [
-            GestureDetector(
-              onTap: () => context.push('/legal/terms'),
-              child: Text('Terms',
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.white.withValues(alpha: 0.5),
-                      decoration: TextDecoration.underline,
-                      decorationColor:
-                          Colors.white.withValues(alpha: 0.5))),
-            ),
-            GestureDetector(
-              onTap: () => context.push('/legal/privacy'),
-              child: Text('Privacy',
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.white.withValues(alpha: 0.5),
-                      decoration: TextDecoration.underline,
-                      decorationColor:
-                          Colors.white.withValues(alpha: 0.5))),
-            ),
-            GestureDetector(
-              onTap: () {},
-              child: Text('About',
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.white.withValues(alpha: 0.5))),
-            ),
-            GestureDetector(
-              onTap: () {},
-              child: Text('Contact',
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.white.withValues(alpha: 0.5))),
-            ),
+            _mobileLink(context, 'Terms', () => context.push('/legal/terms')),
+            _mobileLink(context, 'Privacy', () => context.push('/legal/privacy')),
+            _mobileLink(context, 'About', () => context.push('/about')),
+            _mobileLink(context, 'Blog', () => context.push('/blog')),
+            _mobileLink(context, 'Contact', () => context.push('/contact')),
           ],
         ),
       ],
+    );
+  }
+
+  Widget _mobileLink(BuildContext context, String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Text(
+        label,
+        style: TextStyle(
+            fontSize: 13,
+            color: Colors.white.withValues(alpha: 0.5),
+            decoration: TextDecoration.underline,
+            decorationColor: Colors.white.withValues(alpha: 0.5)),
+      ),
     );
   }
 }

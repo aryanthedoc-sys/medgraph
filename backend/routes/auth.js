@@ -39,9 +39,7 @@ router.post('/send-otp', async (req, res, next) => {
       expiresAt: Date.now() + 10 * 60 * 1000, // 10 min
     });
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`[DEV] OTP for ${email}: ${otp}`);
-    }
+    console.log(`[OTP] Generated for ${email}: ${otp}`);
     await sendOTP(email, otp);
 
     res.json({ ok: true });

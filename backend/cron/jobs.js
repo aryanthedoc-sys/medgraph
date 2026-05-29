@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const { supabaseAdmin } = require('../services/supabase');
-const { sendSessionMatched, sendNoMatchFound } = require('../services/resend');
+const { sendSessionMatched, sendSessionReminder1h, sendSessionReminder15m, sendNoMatchFound } = require('../services/resend');
 const { sendPush } = require('../services/fcm');
 const { v4: uuidv4 } = require('uuid');
 
@@ -45,6 +45,7 @@ cron.schedule('*/15 * * * *', async () => {
 
         // Create session
         const roomId = `session-${uuidv4()}`;
+        const scheduledAt = new Date(`${a.date}T${a.time}:00`).toISOString();
         const { data: session } = await supabaseAdmin
           .from('sessions')
           .insert({
@@ -55,6 +56,7 @@ cron.schedule('*/15 * * * *', async () => {
             topic: a.topic,
             mode: a.mode,
             status: 'scheduled',
+            scheduled_at: scheduledAt,
           })
           .select()
           .single();
@@ -76,8 +78,8 @@ cron.schedule('*/15 * * * *', async () => {
         ]);
 
         await Promise.all([
-          sendSessionMatched(userA.data.email, userB.data.full_name, a.topic, dateTime).catch(console.error),
-          sendSessionMatched(userB.data.email, userA.data.full_name, a.topic, dateTime).catch(console.error),
+          sendSessionMatched(userA.data.email, userB.data.full_name, a.topic, dateTime, roomId).catch(console.error),
+          sendSessionMatched(userB.data.email, userA.data.full_name, a.topic, dateTime, roomId).catch(console.error),
           sendPush(userA.data.fcm_token, {
             title: 'Session confirmed!',
             body: `Your session with ${userB.data.full_name} on "${a.topic}" is set for ${dateTime}.`,
@@ -254,6 +256,65 @@ cron.schedule('0 2 * * *', async () => {
     }
   } catch (err) {
     console.error('[cron:fame]', err.message);
+  }
+}, { timezone: 'Asia/Kolkata' });
+
+// ─── Session reminders — every 15 minutes ────────────────────────────────────
+cron.schedule('*/15 * * * *', async () => {
+  try {
+    const now = new Date();
+    const in1hFrom = new Date(now.getTime() + 55 * 60 * 1000).toISOString();
+    const in1hTo   = new Date(now.getTime() + 65 * 60 * 1000).toISOString();
+    const in15mFrom = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
+    const in15mTo   = new Date(now.getTime() + 20 * 60 * 1000).toISOString();
+
+    // 1-hour reminders
+    const { data: sessions1h } = await supabaseAdmin
+      .from('sessions')
+      .select('id, user1_id, user2_id, room_id, topic')
+      .eq('status', 'scheduled')
+      .eq('reminder_1h_sent', false)
+      .gte('scheduled_at', in1hFrom)
+      .lte('scheduled_at', in1hTo);
+
+    for (const s of (sessions1h || [])) {
+      const [u1, u2] = await Promise.all([
+        supabaseAdmin.from('users').select('email, full_name').eq('id', s.user1_id).single(),
+        supabaseAdmin.from('users').select('email, full_name').eq('id', s.user2_id).single(),
+      ]);
+      await Promise.all([
+        sendSessionReminder1h(u1.data.email, u2.data.full_name, s.topic, s.room_id).catch(console.error),
+        sendSessionReminder1h(u2.data.email, u1.data.full_name, s.topic, s.room_id).catch(console.error),
+      ]);
+      await supabaseAdmin.from('sessions').update({ reminder_1h_sent: true }).eq('id', s.id);
+    }
+
+    // 15-minute reminders
+    const { data: sessions15m } = await supabaseAdmin
+      .from('sessions')
+      .select('id, user1_id, user2_id, room_id, topic')
+      .eq('status', 'scheduled')
+      .eq('reminder_15m_sent', false)
+      .gte('scheduled_at', in15mFrom)
+      .lte('scheduled_at', in15mTo);
+
+    for (const s of (sessions15m || [])) {
+      const [u1, u2] = await Promise.all([
+        supabaseAdmin.from('users').select('email, full_name').eq('id', s.user1_id).single(),
+        supabaseAdmin.from('users').select('email, full_name').eq('id', s.user2_id).single(),
+      ]);
+      await Promise.all([
+        sendSessionReminder15m(u1.data.email, u2.data.full_name, s.topic, s.room_id).catch(console.error),
+        sendSessionReminder15m(u2.data.email, u1.data.full_name, s.topic, s.room_id).catch(console.error),
+      ]);
+      await supabaseAdmin.from('sessions').update({ reminder_15m_sent: true }).eq('id', s.id);
+    }
+
+    if ((sessions1h?.length || 0) + (sessions15m?.length || 0) > 0) {
+      console.log(`[cron:reminders] 1h: ${sessions1h?.length || 0}, 15m: ${sessions15m?.length || 0}`);
+    }
+  } catch (err) {
+    console.error('[cron:reminders]', err.message);
   }
 }, { timezone: 'Asia/Kolkata' });
 
