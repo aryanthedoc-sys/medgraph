@@ -62,11 +62,6 @@ router.post('/verify-otp', async (req, res, next) => {
     }
     otpStore.delete(lower);
 
-    // Generate a unique handle
-    const slug  = entry.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    const rand  = Math.floor(100 + Math.random() * 900);
-    const handle = `${slug}-${rand}`;
-
     // Create Supabase Auth user with a temporary password
     const tempPassword = uuidv4();
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -76,17 +71,18 @@ router.post('/verify-otp', async (req, res, next) => {
     });
     if (authError) throw authError;
 
-    // Create profile row
-    const college = lower.endsWith('.ac.in') ? lower.split('@')[1] : null;
-    const { error: insertError } = await supabaseAdmin.from('users').insert({
-      id: authData.user.id,
-      email: lower,
-      full_name: entry.name,
-      role: entry.role,
-      status: entry.role === 'student' ? 'verified_student' : 'pending_verification',
-      college,
-      handle,
-    });
+    // Insert minimal profile row into public.users
+    const { data: profileData, error: insertError } = await supabaseAdmin
+      .from('users')
+      .insert({
+        id: authData.user.id,
+        email: lower,
+        full_name: entry.name,
+        role: entry.role,
+        status: entry.role === 'student' ? 'verified_student' : 'pending_verification',
+      })
+      .select()
+      .single();
     if (insertError) {
       console.error('Supabase insert error:', JSON.stringify(insertError));
       console.error('Error code:', insertError.code);
@@ -96,6 +92,7 @@ router.post('/verify-otp', async (req, res, next) => {
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       throw insertError;
     }
+    console.log('Profile created:', profileData?.id);
 
     res.json({ ok: true, isNewUser: true, tempPassword });
   } catch (err) {
@@ -121,7 +118,6 @@ router.post('/register-doctor', async (req, res, next) => {
 
     const slug   = fullName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     const handle = `dr-${slug}-${Math.floor(100 + Math.random() * 900)}`;
-
     const tempPassword = uuidv4();
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: lower,
@@ -130,19 +126,18 @@ router.post('/register-doctor', async (req, res, next) => {
     });
     if (authError) throw authError;
 
-    const { error: insertError } = await supabaseAdmin.from('users').insert({
-      id: authData.user.id,
-      email: lower,
-      full_name: fullName,
-      role: 'doctor',
-      status: 'pending_verification',
-      mrn,
-      specialty,
-      hospital,
-      years_experience: yearsExperience,
-      id_photo_url: idPhotoUrl,
-      handle,
-    });
+    // Insert minimal profile row into public.users
+    const { error: insertError } = await supabaseAdmin
+      .from('users')
+      .insert({
+        id: authData.user.id,
+        email: lower,
+        full_name: fullName,
+        role: 'doctor',
+        status: 'pending_verification',
+      })
+      .select()
+      .single();
     if (insertError) {
       console.error('Supabase insert error (doctor):', JSON.stringify(insertError));
       console.error('Error code:', insertError.code);
@@ -150,6 +145,15 @@ router.post('/register-doctor', async (req, res, next) => {
       console.error('Error details:', insertError.details);
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       throw insertError;
+    }
+
+    // Update with doctor-specific fields now that the row exists
+    const { error: updateError } = await supabaseAdmin
+      .from('users')
+      .update({ mrn, specialty, hospital, years_experience: yearsExperience, id_photo_url: idPhotoUrl, handle })
+      .eq('id', authData.user.id);
+    if (updateError) {
+      console.error('Supabase update error (doctor fields):', JSON.stringify(updateError));
     }
 
     res.json({ ok: true });
