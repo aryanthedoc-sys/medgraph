@@ -1,22 +1,38 @@
 const { Resend } = require('resend');
 
+console.log('RESEND KEY CHECK:', process.env.RESEND_API_KEY ? 'LOADED' : 'MISSING');
+
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM   = 'MedGraph <onboarding@resend.dev>';
 
 async function sendOTP(email, otp) {
-  return resend.emails.send({
-    from: FROM,
-    to: email,
-    subject: 'Your MedGraph verification code',
-    html: `
-      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-        <h2 style="font-size:24px;font-weight:700">MedGraph</h2>
-        <p>Your verification code is:</p>
-        <div style="font-size:40px;font-weight:800;letter-spacing:8px;margin:16px 0">${otp}</div>
-        <p style="color:#666;font-size:13px">This code expires in 10 minutes. Never share it with anyone.</p>
-      </div>
-    `,
-  });
+  console.log('Sending OTP email to:', email);
+  console.log('Using Resend key:', process.env.RESEND_API_KEY ? 'SET' : 'NOT SET');
+  try {
+    const result = await resend.emails.send({
+      from: FROM,
+      to: email,
+      subject: 'Your MedGraph verification code',
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+          <h1 style="font-size: 24px; color: #1D1D1F;">Your verification code</h1>
+          <div style="background: #F5F5F7; border-radius: 16px; padding: 24px; margin: 24px 0; text-align: center;">
+            <p style="font-size: 48px; font-weight: 700; letter-spacing: 8px; color: #00C7BE; margin: 0;">${otp}</p>
+          </div>
+          <p style="color: #6E6E73; font-size: 15px;">This code expires in 10 minutes. If you didn't request this, ignore this email.</p>
+          <p style="color: #98989D; font-size: 13px; margin-top: 24px;">MedGraph · Educational platform</p>
+        </div>
+      `,
+    });
+    console.log('Resend result:', JSON.stringify(result));
+    if (result.error) {
+      throw new Error(`Resend API error: ${JSON.stringify(result.error)}`);
+    }
+    return result;
+  } catch (err) {
+    console.error('Resend FAILED:', err.message, err);
+    throw err;
+  }
 }
 
 async function sendWelcomeDoctor(email, name) {

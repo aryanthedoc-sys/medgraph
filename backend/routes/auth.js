@@ -6,6 +6,8 @@ const { supabaseAdmin } = require('../services/supabase');
 const { sendOTP, sendWelcomeDoctor } = require('../services/resend');
 const auth = require('../middleware/auth');
 
+console.log('RESEND KEY CHECK:', process.env.RESEND_API_KEY ? 'LOADED' : 'MISSING');
+
 // Temporary OTP store: email → { otp, expiresAt, name, role }
 const otpStore = new Map();
 
@@ -76,7 +78,7 @@ router.post('/verify-otp', async (req, res, next) => {
 
     // Create profile row
     const college = lower.endsWith('.ac.in') ? lower.split('@')[1] : null;
-    await supabaseAdmin.from('users').insert({
+    const { error: insertError } = await supabaseAdmin.from('users').insert({
       id: authData.user.id,
       email: lower,
       full_name: entry.name,
@@ -85,6 +87,15 @@ router.post('/verify-otp', async (req, res, next) => {
       college,
       handle,
     });
+    if (insertError) {
+      console.error('Supabase insert error:', JSON.stringify(insertError));
+      console.error('Error code:', insertError.code);
+      console.error('Error message:', insertError.message);
+      console.error('Error details:', insertError.details);
+      // Clean up the auth user so the email isn't permanently stuck
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      throw insertError;
+    }
 
     res.json({ ok: true, isNewUser: true, tempPassword });
   } catch (err) {
@@ -119,7 +130,7 @@ router.post('/register-doctor', async (req, res, next) => {
     });
     if (authError) throw authError;
 
-    await supabaseAdmin.from('users').insert({
+    const { error: insertError } = await supabaseAdmin.from('users').insert({
       id: authData.user.id,
       email: lower,
       full_name: fullName,
@@ -132,6 +143,14 @@ router.post('/register-doctor', async (req, res, next) => {
       id_photo_url: idPhotoUrl,
       handle,
     });
+    if (insertError) {
+      console.error('Supabase insert error (doctor):', JSON.stringify(insertError));
+      console.error('Error code:', insertError.code);
+      console.error('Error message:', insertError.message);
+      console.error('Error details:', insertError.details);
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      throw insertError;
+    }
 
     res.json({ ok: true });
   } catch (err) {
