@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const crypto  = require('crypto');
 const { v4: uuidv4 } = require('uuid');
+const { createClient } = require('@supabase/supabase-js');
 const { supabaseAdmin } = require('../services/supabase');
 const { sendOTP, sendWelcomeDoctor } = require('../services/resend');
 const auth = require('../middleware/auth');
@@ -94,7 +95,24 @@ router.post('/verify-otp', async (req, res, next) => {
     }
     console.log('Profile created:', profileData?.id);
 
-    res.json({ ok: true, isNewUser: true, tempPassword });
+    // Sign in server-side to get a real JWT session — avoids client signInWithPassword
+    const anonClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+    const { data: signInData, error: signInError } = await anonClient.auth.signInWithPassword({
+      email: lower,
+      password: tempPassword,
+    });
+    if (signInError) {
+      console.error('Server-side sign-in failed:', signInError.message);
+      // Fall back: return tempPassword so client can try itself
+      return res.json({ ok: true, isNewUser: true, tempPassword });
+    }
+
+    res.json({
+      ok: true,
+      isNewUser: true,
+      accessToken:  signInData.session.access_token,
+      refreshToken: signInData.session.refresh_token,
+    });
   } catch (err) {
     console.error('=== USER CREATE ERROR ===');
     console.error('code:', err.code);
