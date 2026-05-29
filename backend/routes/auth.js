@@ -110,7 +110,8 @@ router.post('/verify-otp', async (req, res, next) => {
     res.json({
       ok: true,
       isNewUser: true,
-      accessToken:  signInData.session.access_token,
+      userId:      authData.user.id,
+      accessToken: signInData.session.access_token,
       refreshToken: signInData.session.refresh_token,
     });
   } catch (err) {

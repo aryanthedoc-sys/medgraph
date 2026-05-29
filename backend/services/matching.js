@@ -17,7 +17,10 @@ function initSocket(io) {
     socket.on('join-queue', async (data) => {
       console.log('JOIN QUEUE', JSON.stringify(data));
       const { userId, mode, filters } = data;
-      if (!userId) return;
+      if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+        console.warn('join-queue rejected: empty userId from socket', socket.id);
+        return;
+      }
 
       // Remove any existing queue entry for this user
       for (const [sid, entry] of queue.entries()) {
