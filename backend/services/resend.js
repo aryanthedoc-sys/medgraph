@@ -3,7 +3,7 @@ const { Resend } = require('resend');
 console.log('RESEND KEY CHECK:', process.env.RESEND_API_KEY ? 'LOADED' : 'MISSING');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM   = 'MedGraph <onboarding@resend.dev>';
+const FROM   = 'MedGraph <noreply@medgraph.in>';
 
 async function sendOTP(email, otp) {
   console.log('Sending OTP email to:', email);
