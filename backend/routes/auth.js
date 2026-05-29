@@ -96,7 +96,22 @@ router.post('/verify-otp', async (req, res, next) => {
 
     res.json({ ok: true, isNewUser: true, tempPassword });
   } catch (err) {
-    next(err);
+    console.error('=== USER CREATE ERROR ===');
+    console.error('code:', err.code);
+    console.error('message:', err.message);
+    console.error('details:', err.details);
+    console.error('hint:', err.hint);
+    console.error('full:', JSON.stringify(err));
+    return res.status(500).json({
+      success: false,
+      error: 'Database error creating new user',
+      debug: {
+        code: err.code,
+        message: err.message,
+        details: err.details,
+        hint: err.hint,
+      },
+    });
   }
 });
 
