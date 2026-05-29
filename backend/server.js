@@ -28,18 +28,35 @@ const app    = express();
 app.set('trust proxy', 1);
 const server = http.createServer(app);
 
+// ─── CORS ────────────────────────────────────────────────────────────────────
+const corsOptions = {
+  origin: [
+    'https://medgraph.in',
+    'https://www.medgraph.in',
+    'https://medgraph-six.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:8080',
+    'http://localhost:8181',
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
 // ─── Socket.io ───────────────────────────────────────────────────────────────
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || '*',
+    origin: corsOptions.origin,
     methods: ['GET', 'POST'],
+    credentials: true,
   },
 });
 initSocket(io);
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false })); // CSP off for admin panel
-app.use(cors({ origin: process.env.FRONTEND_URL || '*', credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(rateLimiter);
 
