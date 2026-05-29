@@ -38,7 +38,7 @@ router.post('/send-otp', async (req, res, next) => {
       otp,
       name,
       role,
-      expiresAt: Date.now() + 10 * 60 * 1000, // 10 min
+      expiresAt: Date.now() + 15 * 60 * 1000, // 15 min
     });
 
     console.log(`[OTP] Generated for ${email}: ${otp}`);
