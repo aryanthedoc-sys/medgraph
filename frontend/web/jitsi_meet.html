@@ -24,14 +24,19 @@
       height: '100%',
       userInfo: { displayName: name },
       configOverwrite: {
+        // Disable pre-join page (both legacy and current API)
         prejoinPageEnabled:        false,
+        prejoinConfig:             { enabled: false },
+        // Suppress moderator-specific UI and the moderated-rooms login redirect
         disableModeratorIndicator: true,
+        moderatedRoomServiceUrl:   '',
+        // Lobby completely off
+        lobby:                     { enable: false, autoKnock: false },
+        autoKnockLobby:            false,
+        enableLobbyChat:           false,
+        securityUi:                { hideLobbyButton: true, disableLobbyPassword: true },
         startWithAudioMuted:       false,
         startWithVideoMuted:       false,
-        enableLobbyChat:           false,
-        autoKnockLobby:            true,
-        securityUi: { hideLobbyButton: true, disableLobbyPassword: true },
-        lobby: { enable: false, autoKnock: false },
       },
       interfaceConfigOverwrite: {
         HIDE_INVITE_MORE_HEADER:        true,
@@ -43,14 +48,6 @@
           'settings', 'raisehand', 'videoquality', 'tileview',
         ],
       },
-    });
-
-    // As soon as we become moderator, kill the lobby so the partner isn't
-    // trapped in a "knock to join" waiting screen.
-    api.on('participantRoleChanged', (event) => {
-      if (event.role === 'moderator') {
-        api.executeCommand('toggleLobby', false);
-      }
     });
 
     // Relay hangup back to the Flutter parent so it can navigate away
