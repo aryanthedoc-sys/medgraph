@@ -29,9 +29,9 @@
         startWithAudioMuted:       false,
         startWithVideoMuted:       false,
         enableLobbyChat:           false,
-        disableLobbyMode:          true,
-        // Ensure no lobby / knock-to-join gate
+        autoKnockLobby:            true,
         securityUi: { hideLobbyButton: true, disableLobbyPassword: true },
+        lobby: { enable: false, autoKnock: false },
       },
       interfaceConfigOverwrite: {
         HIDE_INVITE_MORE_HEADER:        true,
@@ -43,6 +43,14 @@
           'settings', 'raisehand', 'videoquality', 'tileview',
         ],
       },
+    });
+
+    // As soon as we become moderator, kill the lobby so the partner isn't
+    // trapped in a "knock to join" waiting screen.
+    api.on('participantRoleChanged', (event) => {
+      if (event.role === 'moderator') {
+        api.executeCommand('toggleLobby', false);
+      }
     });
 
     // Relay hangup back to the Flutter parent so it can navigate away
