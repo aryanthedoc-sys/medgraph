@@ -1,16 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_colors.dart';
+import '../providers/auth_provider.dart';
 import '../../shared/widgets/responsive_layout.dart';
 import '../../shared/widgets/disclaimer_overlay.dart';
 
 /// Shell that wraps authenticated screens with bottom nav (mobile)
 /// or left sidebar (desktop ≥ 600px).
-class MainScaffold extends StatelessWidget {
+/// Loads the current user profile once on first mount so all child
+/// screens can read currentUserProvider without it being null.
+class MainScaffold extends ConsumerStatefulWidget {
   const MainScaffold({super.key, required this.child});
-
   final Widget child;
 
+  @override
+  ConsumerState<MainScaffold> createState() => _MainScaffoldState();
+}
+
+class _MainScaffoldState extends ConsumerState<MainScaffold> {
   static const _tabs = [
     _TabItem(icon: Icons.home_outlined, activeIcon: Icons.home, label: 'Home', path: '/home'),
     _TabItem(icon: Icons.play_circle_outline, activeIcon: Icons.play_circle, label: 'Feed', path: '/feed'),
@@ -20,10 +28,20 @@ class MainScaffold extends StatelessWidget {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    // Load user profile once when the authenticated shell first mounts.
+    // This ensures currentUserProvider is never null inside any tab screen.
+    if (ref.read(currentUserProvider) == null) {
+      ref.read(currentUserProvider.notifier).loadUser('');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ResponsiveLayout(
-      mobile: _MobileScaffold(tabs: _tabs, child: child),
-      desktop: _DesktopScaffold(tabs: _tabs, child: child),
+      mobile: _MobileScaffold(tabs: _tabs, child: widget.child),
+      desktop: _DesktopScaffold(tabs: _tabs, child: widget.child),
     );
   }
 }

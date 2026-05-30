@@ -71,7 +71,7 @@ class _LandingStatsState extends State<LandingStats> {
                             color: const Color(0x1A000000),
                             margin: const EdgeInsets.symmetric(vertical: 24));
                       }
-                      return _StatItem(stat: _stats[i ~/ 2], visible: _visible);
+                      return _StatItem(stat: _stats[i ~/ 2], visible: _visible, isMobile: isMobile);
                     }),
                   )
                 : IntrinsicHeight(
@@ -86,7 +86,7 @@ class _LandingStatsState extends State<LandingStats> {
                         }
                         return Expanded(
                           child: _StatItem(
-                              stat: _stats[i ~/ 2], visible: _visible),
+                              stat: _stats[i ~/ 2], visible: _visible, isMobile: isMobile),
                         );
                       }),
                     ),
@@ -100,12 +100,14 @@ class _LandingStatsState extends State<LandingStats> {
 }
 
 class _StatItem extends StatelessWidget {
-  const _StatItem({required this.stat, required this.visible});
+  const _StatItem({required this.stat, required this.visible, required this.isMobile});
   final _Stat stat;
   final bool visible;
+  final bool isMobile;
 
   @override
   Widget build(BuildContext context) {
+    final numFontSize = isMobile ? 32.0 : 48.0;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -117,8 +119,8 @@ class _StatItem extends StatelessWidget {
             curve: Curves.easeOut,
             builder: (_, t, __) => Text(
               stat.animatedLabel(t),
-              style: const TextStyle(
-                fontSize: 48,
+              style: TextStyle(
+                fontSize: numFontSize,
                 fontWeight: FontWeight.w700,
                 color: Colors.black,
                 letterSpacing: -1,
@@ -126,9 +128,9 @@ class _StatItem extends StatelessWidget {
             ),
           )
         else
-          const Text('—',
+          Text('—',
               style: TextStyle(
-                  fontSize: 48,
+                  fontSize: numFontSize,
                   fontWeight: FontWeight.w700,
                   color: Colors.black)),
         const SizedBox(height: 8),

@@ -48,6 +48,11 @@ class UserModel {
     this.proFilterSameCollege = false,
     this.proFilterSameCity = false,
     this.proFilterSameState = false,
+    // extended profile
+    this.tags = const [],
+    this.languages = const [],
+    this.leaderboardRank,
+    this.sessionCount = 0,
   });
 
   final String id;
@@ -101,6 +106,12 @@ class UserModel {
   final bool proFilterSameCollege;
   final bool proFilterSameCity;
   final bool proFilterSameState;
+
+  // Extended profile
+  final List<String> tags;
+  final List<String> languages;
+  final int? leaderboardRank;
+  final int sessionCount;
 
   bool get isDoctor  => role == 'doctor';
   bool get isStudent => role.startsWith('student_') || role == 'student';
@@ -176,6 +187,10 @@ class UserModel {
     proFilterSameCollege: j['pro_filter_same_college'] as bool? ?? false,
     proFilterSameCity:    j['pro_filter_same_city'] as bool? ?? false,
     proFilterSameState:   j['pro_filter_same_state'] as bool? ?? false,
+    tags:         (j['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+    languages:    (j['languages'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+    leaderboardRank: j['leaderboard_rank'] as int?,
+    sessionCount:    j['session_count'] as int? ?? 0,
   );
 
   Map<String, dynamic> toJson() => {

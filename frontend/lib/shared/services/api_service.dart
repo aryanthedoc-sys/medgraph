@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'auth_storage.dart';
 
 /// Handles all HTTP calls to the MedGraph backend.
 /// The base URL is set from compile-time env or falls back to localhost.
@@ -15,8 +15,7 @@ class ApiService {
     defaultValue: 'https://medgraph-backend-2py8.onrender.com',
   );
 
-  static String get _token =>
-      Supabase.instance.client.auth.currentSession?.accessToken ?? '';
+  static String get _token => AuthStorage.token;
 
   static Map<String, String> get _headers => {
     'Content-Type': 'application/json',
@@ -35,6 +34,18 @@ class ApiService {
     Map<String, dynamic> body,
   ) async {
     final res = await http.post(
+      Uri.parse('$_base$path'),
+      headers: _headers,
+      body: jsonEncode(body),
+    );
+    return _parse(res);
+  }
+
+  static Future<Map<String, dynamic>> put(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    final res = await http.put(
       Uri.parse('$_base$path'),
       headers: _headers,
       body: jsonEncode(body),
@@ -95,6 +106,7 @@ class ApiService {
       throw ApiException(
         data['error'] as String? ?? 'Unknown error',
         res.statusCode,
+        debugInfo: data['debug'] as Map<String, dynamic>?,
       );
     }
     return data;
@@ -102,9 +114,10 @@ class ApiService {
 }
 
 class ApiException implements Exception {
-  const ApiException(this.message, this.statusCode);
+  const ApiException(this.message, this.statusCode, {this.debugInfo});
   final String message;
   final int statusCode;
+  final Map<String, dynamic>? debugInfo;
 
   @override
   String toString() => 'ApiException($statusCode): $message';

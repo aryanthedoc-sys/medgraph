@@ -9,8 +9,10 @@ import '../../../shared/services/api_service.dart';
 import '../../../shared/services/auth_storage.dart';
 
 class OTPScreen extends StatefulWidget {
-  const OTPScreen({super.key, required this.email});
+  const OTPScreen({super.key, required this.email, this.name, this.userType});
   final String email;
+  final String? name;
+  final String? userType;
 
   @override
   State<OTPScreen> createState() => _OTPScreenState();
@@ -59,6 +61,8 @@ class _OTPScreenState extends State<OTPScreen> {
       final res = await ApiService.post('/api/auth/verify-otp', {
         'email': widget.email,
         'otp': _otp,
+        if (widget.name != null) 'name': widget.name!,
+        if (widget.userType != null) 'role': widget.userType!,
       });
       // ignore: avoid_print
       print('Verify response: $res');

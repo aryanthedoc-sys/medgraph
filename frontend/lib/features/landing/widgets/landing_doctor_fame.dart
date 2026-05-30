@@ -338,9 +338,9 @@ class _FeatureGrid extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: isMobile ? 1 : 3,
-        mainAxisSpacing: 24,
+        mainAxisSpacing: 20,
         crossAxisSpacing: 24,
-        childAspectRatio: isMobile ? 4 : 2,
+        childAspectRatio: isMobile ? 3 : 2,
       ),
       itemCount: features.length,
       itemBuilder: (_, i) {

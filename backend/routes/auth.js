@@ -73,7 +73,8 @@ router.post('/send-otp', async (req, res, next) => {
 // ─── POST /api/auth/verify-otp ───────────────────────────────────────────────
 router.post('/verify-otp', async (req, res, next) => {
   try {
-    const { email, otp } = req.body;
+    const { email, otp, name: bodyName, role: bodyRole } = req.body;
+    console.log('Verify OTP body:', { email, otp: '***', name: bodyName, role: bodyRole });
     const lower = email?.toLowerCase();
     const entry = otpStore.get(lower);
 
@@ -81,6 +82,12 @@ router.post('/verify-otp', async (req, res, next) => {
       return res.status(400).json({ error: 'Invalid or expired code' });
     }
     otpStore.delete(lower);
+
+    const validRoles = ['student_mbbs', 'student_bds', 'student_bams', 'doctor'];
+    const safeRole = validRoles.includes(entry?.userType)
+      ? entry.userType
+      : validRoles.includes(bodyRole) ? bodyRole : 'student_mbbs';
+    const safeName = ((entry?.name || bodyName || '').trim()) || 'User';
 
     // Create Supabase Auth user with a temporary password
     const tempPassword = uuidv4();
@@ -95,26 +102,26 @@ router.post('/verify-otp', async (req, res, next) => {
     const userRow = {
       id: authData.user.id,
       email: lower,
-      full_name: entry.name,
-      role: entry.userType,
+      full_name: safeName,
+      role: safeRole,
       status: 'pending_verification',
       is_verified: false,
     };
 
     // Student-specific fields
-    if (entry.userType !== 'doctor') {
-      if (entry.collegeName)  userRow.college_name  = entry.collegeName;
-      if (entry.collegeCity)  userRow.college_city  = entry.collegeCity;
-      if (entry.collegeState) userRow.college_state = entry.collegeState;
-      if (entry.university)   userRow.university    = entry.university;
-      if (entry.yearOfStudy)  userRow.year_of_study = entry.yearOfStudy;
+    if (safeRole !== 'doctor') {
+      if (entry?.collegeName)  userRow.college_name  = entry.collegeName;
+      if (entry?.collegeCity)  userRow.college_city  = entry.collegeCity;
+      if (entry?.collegeState) userRow.college_state = entry.collegeState;
+      if (entry?.university)   userRow.university    = entry.university;
+      if (entry?.yearOfStudy)  userRow.year_of_study = entry.yearOfStudy;
     }
 
     // Doctor-specific fields
-    if (entry.userType === 'doctor') {
-      if (entry.specialty)       userRow.specialty         = entry.specialty;
-      if (entry.nmcNumber)       userRow.mrn               = entry.nmcNumber;
-      if (entry.yearsExperience) userRow.years_experience  = parseInt(entry.yearsExperience) || null;
+    if (safeRole === 'doctor') {
+      if (entry?.specialty)       userRow.specialty         = entry.specialty;
+      if (entry?.nmcNumber)       userRow.mrn               = entry.nmcNumber;
+      if (entry?.yearsExperience) userRow.years_experience  = parseInt(entry.yearsExperience) || null;
     }
 
     // Insert profile row

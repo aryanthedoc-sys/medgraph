@@ -17,6 +17,8 @@ import '../../features/sessions/screens/sessions_screen.dart';
 import '../../features/feed/screens/feed_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../features/profile/screens/public_profile_screen.dart';
+import '../../features/profile/screens/settings_screen.dart';
+import '../../features/profile/screens/followers_screen.dart';
 import '../../features/leaderboard/screens/leaderboard_screen.dart';
 import '../../features/search/screens/search_screen.dart';
 import '../../features/payments/screens/upgrade_screen.dart';
@@ -82,8 +84,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/register/otp',
         builder: (_, state) {
-          final email = state.extra as String? ?? '';
-          return OTPScreen(email: email);
+          final extra = state.extra;
+          if (extra is Map<String, dynamic>) {
+            return OTPScreen(
+              email:    extra['email']    as String? ?? '',
+              name:     extra['name']     as String?,
+              userType: extra['userType'] as String?,
+            );
+          }
+          return OTPScreen(email: extra as String? ?? '');
         },
       ),
       GoRoute(path: '/register/doctor',        builder: (_, __) => const DoctorRegisterScreen()),
@@ -117,8 +126,34 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Full-screen screens (no bottom nav)
       GoRoute(path: '/profile/edit',   builder: (_, __) => const EditProfileScreen()),
+      GoRoute(path: '/settings',       builder: (_, __) => const SettingsScreen()),
 
-      // Public profile
+      // Other user profiles (full-screen)
+      GoRoute(
+        path: '/profile/:userId',
+        builder: (_, state) {
+          final userId = state.pathParameters['userId']!;
+          return ProfileScreen(userId: userId);
+        },
+      ),
+
+      // Followers / Following
+      GoRoute(
+        path: '/profile/:userId/followers',
+        builder: (_, state) => FollowersScreen(
+          userId: state.pathParameters['userId']!,
+          mode: 'followers',
+        ),
+      ),
+      GoRoute(
+        path: '/profile/:userId/following',
+        builder: (_, state) => FollowersScreen(
+          userId: state.pathParameters['userId']!,
+          mode: 'following',
+        ),
+      ),
+
+      // Public profile (legacy handle-based)
       GoRoute(
         path: '/dr/:handle',
         builder: (_, state) {

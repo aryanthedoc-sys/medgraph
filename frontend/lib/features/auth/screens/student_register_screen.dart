@@ -113,7 +113,11 @@ class _StudentRegisterScreenState extends State<StudentRegisterScreen> {
 
       await ApiService.post('/api/auth/send-otp', body);
       if (!mounted) return;
-      context.go('/register/otp', extra: _emailCtr.text.trim().toLowerCase());
+      context.go('/register/otp', extra: {
+        'email':    _emailCtr.text.trim().toLowerCase(),
+        'name':     _nameCtr.text.trim(),
+        'userType': _userType,
+      });
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {

@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
 import 'firebase_options.dart';
+import 'shared/services/auth_storage.dart';
 import 'shared/services/notification_service.dart';
 
 Future<void> main() async {
@@ -21,6 +22,8 @@ Future<void> main() async {
       defaultValue: 'placeholder-anon-key',
     ),
   );
+
+  await AuthStorage.init();
 
   // Firebase init — gracefully skipped on web or if credentials aren't set yet.
   if (!kIsWeb) {

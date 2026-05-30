@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../shared/services/auth_storage.dart';
 
 /// Pure black splash screen. Navigates to home or onboarding after 1.5s.
 class SplashScreen extends StatefulWidget {
@@ -30,9 +30,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   void _navigate() {
     if (!mounted) return;
-    final isLoggedIn =
-        Supabase.instance.client.auth.currentSession != null;
-    context.go(isLoggedIn ? '/home' : '/onboarding');
+    context.go(AuthStorage.isLoggedIn ? '/home' : '/onboarding');
   }
 
   @override
