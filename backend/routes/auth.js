@@ -119,7 +119,7 @@ router.post('/verify-otp', async (req, res, next) => {
       if (entry?.collegeCity)  userRow.college_city  = entry.collegeCity;
       if (entry?.collegeState) userRow.college_state = entry.collegeState;
       if (entry?.university)   userRow.university    = entry.university;
-      if (entry?.yearOfStudy)  userRow.year_of_study = entry.yearOfStudy;
+      if (entry?.yearOfStudy)  userRow.year_of_study = String(entry.yearOfStudy || '');
     }
 
     // Doctor-specific fields
