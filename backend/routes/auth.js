@@ -83,10 +83,15 @@ router.post('/verify-otp', async (req, res, next) => {
     }
     otpStore.delete(lower);
 
-    const validRoles = ['student_mbbs', 'student_bds', 'student_bams', 'doctor'];
-    const safeRole = validRoles.includes(entry?.userType)
-      ? entry.userType
-      : validRoles.includes(bodyRole) ? bodyRole : 'student_mbbs';
+    const roleMap = {
+      'student':      'student_mbbs',
+      'student_mbbs': 'student_mbbs',
+      'student_bds':  'student_bds',
+      'student_bams': 'student_bams',
+      'doctor':       'doctor',
+    };
+    const rawRole = entry?.userType || bodyRole;
+    const safeRole = roleMap[rawRole] || 'student_mbbs';
     const safeName = ((entry?.name || bodyName || '').trim()) || 'User';
 
     // Create Supabase Auth user with a temporary password

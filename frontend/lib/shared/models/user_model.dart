@@ -141,7 +141,7 @@ class UserModel {
     id:        j['id'] as String,
     email:     j['email'] as String,
     phone:     j['phone'] as String?,
-    role:      j['role'] as String? ?? 'student',
+    role:      j['role'] as String? ?? 'student_mbbs',
     status:    j['status'] as String? ?? 'pending_verification',
     fullName:  j['full_name'] as String? ?? '',
     avatarUrl: j['avatar_url'] as String?,

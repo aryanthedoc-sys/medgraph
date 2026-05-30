@@ -24,7 +24,7 @@ router.get('/users', auth, async (req, res, next) => {
       .limit(20);
 
     if (type === 'doctor')  query = query.eq('role', 'doctor');
-    if (type === 'student') query = query.eq('role', 'student');
+    if (type === 'student') query = query.in('role', ['student_mbbs', 'student_bds', 'student_bams', 'student']);
 
     // Connections-only visibility: only show if requester follows them
     // For simplicity, we post-filter — scalable enough for 20 results
