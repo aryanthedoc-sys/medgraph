@@ -107,7 +107,8 @@ function initSocket(io) {
             same_city: user.pro_filter_same_city || false,
             same_state: user.pro_filter_same_state || false,
           },
-          collegeName: user.college_name,
+          fullName:   user.full_name   || '',
+          collegeName: user.college_name || '',
           city: user.city,
           state: user.state,
         });
@@ -235,46 +236,44 @@ async function createSession(io, socketId1, socketId2, data1, data2) {
   if (s1) s1.join(roomId);
   if (s2) s2.join(roomId);
 
-  // Fetch real names before emitting so the call screen shows the partner's name
-  let u1, u2;
-  try {
-    [{ data: u1 }, { data: u2 }] = await Promise.all([
-      supabaseAdmin.from('users').select('full_name, college_name, fcm_token').eq('id', data1.userId).single(),
-      supabaseAdmin.from('users').select('full_name, college_name, fcm_token').eq('id', data2.userId).single(),
-    ]);
-  } catch (e) {
-    console.error('[match] name lookup failed:', e.message);
-  }
-
+  // Names and college are already in the queue entry — no extra DB round-trip needed.
   io.to(socketId1).emit('match-found', {
     roomId,
     partnerId:      data2.userId,
-    partnerName:    u2?.full_name    ?? 'Your match',
-    partnerCollege: u2?.college_name ?? '',
+    partnerName:    data2.fullName    || 'Your match',
+    partnerCollege: data2.collegeName || '',
   });
   io.to(socketId2).emit('match-found', {
     roomId,
     partnerId:      data1.userId,
-    partnerName:    u1?.full_name    ?? 'Your match',
-    partnerCollege: u1?.college_name ?? '',
+    partnerName:    data1.fullName    || 'Your match',
+    partnerCollege: data1.collegeName || '',
   });
 
-  try {
-    await Promise.all([
-      sendPush(u1?.fcm_token, {
-        title: 'Match found!',
-        body: `You've been matched with ${u2?.full_name ?? 'a peer'} — join the call now!`,
-        data: { type: 'match_found', roomId },
-      }),
-      sendPush(u2?.fcm_token, {
-        title: 'Match found!',
-        body: `You've been matched with ${u1?.full_name ?? 'a peer'} — join the call now!`,
-        data: { type: 'match_found', roomId },
-      }),
-    ]);
-  } catch (e) {
-    console.error('[FCM] match push failed:', e.message);
-  }
+  // FCM push — fire-and-forget, non-blocking
+  supabaseAdmin.from('users')
+    .select('full_name, fcm_token')
+    .in('id', [data1.userId, data2.userId])
+    .then(({ data: users }) => {
+      if (!users) return;
+      const [u1, u2] = [
+        users.find(u => u.id === data1.userId),
+        users.find(u => u.id === data2.userId),
+      ];
+      return Promise.all([
+        sendPush(u1?.fcm_token, {
+          title: 'Match found!',
+          body: `You've been matched with ${u2?.full_name ?? 'a peer'} — join the call now!`,
+          data: { type: 'match_found', roomId },
+        }),
+        sendPush(u2?.fcm_token, {
+          title: 'Match found!',
+          body: `You've been matched with ${u1?.full_name ?? 'a peer'} — join the call now!`,
+          data: { type: 'match_found', roomId },
+        }),
+      ]);
+    })
+    .catch(e => console.error('[FCM] match push failed:', e.message));
 }
 
 module.exports = { initSocket, canConnect };
