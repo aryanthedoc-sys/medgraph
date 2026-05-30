@@ -235,22 +235,31 @@ async function createSession(io, socketId1, socketId2, data1, data2) {
   if (s1) s1.join(roomId);
   if (s2) s2.join(roomId);
 
+  // Fetch real names before emitting so the call screen shows the partner's name
+  let u1, u2;
+  try {
+    [{ data: u1 }, { data: u2 }] = await Promise.all([
+      supabaseAdmin.from('users').select('full_name, college_name, fcm_token').eq('id', data1.userId).single(),
+      supabaseAdmin.from('users').select('full_name, college_name, fcm_token').eq('id', data2.userId).single(),
+    ]);
+  } catch (e) {
+    console.error('[match] name lookup failed:', e.message);
+  }
+
   io.to(socketId1).emit('match-found', {
     roomId,
-    partnerId: data2.userId,
-    partnerName: 'Your match',
+    partnerId:      data2.userId,
+    partnerName:    u2?.full_name    ?? 'Your match',
+    partnerCollege: u2?.college_name ?? '',
   });
   io.to(socketId2).emit('match-found', {
     roomId,
-    partnerId: data1.userId,
-    partnerName: 'Your match',
+    partnerId:      data1.userId,
+    partnerName:    u1?.full_name    ?? 'Your match',
+    partnerCollege: u1?.college_name ?? '',
   });
 
   try {
-    const [{ data: u1 }, { data: u2 }] = await Promise.all([
-      supabaseAdmin.from('users').select('full_name, fcm_token').eq('id', data1.userId).single(),
-      supabaseAdmin.from('users').select('full_name, fcm_token').eq('id', data2.userId).single(),
-    ]);
     await Promise.all([
       sendPush(u1?.fcm_token, {
         title: 'Match found!',
