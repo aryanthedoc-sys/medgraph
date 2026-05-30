@@ -31,9 +31,13 @@ class _ProofUploadScreenState extends ConsumerState<ProofUploadScreen> {
       );
       if (result != null && result.files.isNotEmpty) {
         final f = result.files.first;
-        // 10 MB guard
-        if ((f.size) > 10 * 1024 * 1024) {
-          setState(() => _error = 'File too large. Maximum size is 10 MB.');
+        final ext = f.name.split('.').last.toLowerCase();
+        if (!['jpg', 'jpeg', 'png', 'pdf'].contains(ext)) {
+          setState(() => _error = 'Please upload a JPG, PNG or PDF file.');
+          return;
+        }
+        if (f.size > 5 * 1024 * 1024) {
+          setState(() => _error = 'File too large. Maximum 5MB allowed.');
           return;
         }
         setState(() { _file = f; _error = null; });
@@ -188,11 +192,18 @@ class _ProofUploadScreenState extends ConsumerState<ProofUploadScreen> {
                         Text('Tap to upload',
                             style: AppTextStyles.headline.copyWith(color: text)),
                         const SizedBox(height: 4),
-                        Text('JPG, PNG or PDF · Max 10 MB',
+                        Text('JPG, PNG or PDF · Max 5 MB',
                             style: AppTextStyles.footnote.copyWith(color: sub)),
                       ],
                     ],
                   ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  'JPG, PNG or PDF · Maximum 5MB',
+                  style: AppTextStyles.caption.copyWith(color: sub),
                 ),
               ),
               const SizedBox(height: 20),

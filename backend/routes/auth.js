@@ -188,7 +188,7 @@ const PROOF_ALLOWED_MIME = new Set([
 
 const _proofUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
   fileFilter: (_, file, cb) => {
     if (!PROOF_ALLOWED_MIME.has(file.mimetype)) {
       return cb(new Error('Only JPG, PNG or PDF files are allowed'));
@@ -214,6 +214,15 @@ router.post(
   async (req, res, next) => {
     try {
       if (!req.file) return res.status(400).json({ error: 'No file received' });
+
+      const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+      if (req.file.size > MAX_SIZE) {
+        return res.status(400).json({ success: false, error: 'File too large. Maximum 5MB allowed.' });
+      }
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
+      if (!allowedTypes.includes(req.file.mimetype)) {
+        return res.status(400).json({ success: false, error: 'Invalid file type. JPG, PNG or PDF only.' });
+      }
 
       const ext = req.file.mimetype === 'application/pdf' ? 'pdf'
         : req.file.mimetype.split('/')[1].replace('jpeg', 'jpg');
