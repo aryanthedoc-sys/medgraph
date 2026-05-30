@@ -13,6 +13,11 @@ const RECENT_MATCH_TTL_MS = 10 * 60 * 1000; // 10 minutes
 // Returns true if user1 and user2 are allowed to be matched.
 // proSettings: { match_with_bds?: bool } from the queue-joining user.
 function canConnect(user1Role, user2Role, user1ProSettings, user2ProSettings) {
+  // Normalise legacy 'student' role to canonical 'student_mbbs'
+  const norm = (r) => (r === 'student' ? 'student_mbbs' : r);
+  user1Role = norm(user1Role);
+  user2Role = norm(user2Role);
+
   if (!user1Role || !user2Role) return false;
 
   // Same role always allowed (MBBS↔MBBS, BDS↔BDS, BAMS↔BAMS, Doctor↔Doctor)
@@ -89,7 +94,7 @@ function initSocket(io) {
           filters: filters || {},
           socketId: socket.id,
           joinedAt: Date.now(),
-          role: user.role,
+          role: user.role === 'student' ? 'student_mbbs' : user.role,
           proSettings: {
             match_with_bds: user.pro_filter_match_bds || false,
             same_college: user.pro_filter_same_college || false,

@@ -35,10 +35,16 @@ class _RouletteScreenState extends ConsumerState<RouletteScreen>
     _pulse = Tween(begin: 0.95, end: 1.05).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
-    _setupSocketListeners();
+    // Listeners are registered inside onConnected (after socket exists).
   }
 
+  // Called inside onConnected so _socket is guaranteed non-null.
+  // off() first prevents duplicate handlers if the user taps Start multiple times.
   void _setupSocketListeners() {
+    SocketService.off('match-found');
+    SocketService.off('queue-timeout');
+    SocketService.off('queue-error');
+
     SocketService.on('match-found', (data) {
       if (!mounted) return;
       final roomId      = data['roomId'] as String;
@@ -60,7 +66,6 @@ class _RouletteScreenState extends ConsumerState<RouletteScreen>
       _showNoMatchDialog();
     });
 
-    // Handle server-side errors (unverified, suspended, etc.)
     SocketService.on('queue-error', (data) {
       if (!mounted) return;
       setState(() => _state = _MatchState.idle);
@@ -96,6 +101,7 @@ class _RouletteScreenState extends ConsumerState<RouletteScreen>
     setState(() => _state = _MatchState.searching);
 
     SocketService.connect(onConnected: () {
+      _setupSocketListeners(); // socket exists now — safe to register
       SocketService.emit('join-queue', {
         'userId': userId,
         'mode': _mode,
