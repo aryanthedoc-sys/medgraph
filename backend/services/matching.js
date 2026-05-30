@@ -7,7 +7,7 @@ const queue = new Map();
 
 // Track recent matches to avoid immediate re-match
 const recentMatches = new Map();
-const RECENT_MATCH_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const RECENT_MATCH_TTL_MS = 30 * 1000; // 30 seconds
 
 // ─── Connection rules ─────────────────────────────────────────────────────────
 // Returns true if user1 and user2 are allowed to be matched.
