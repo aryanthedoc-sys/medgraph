@@ -21,6 +21,7 @@ const roomsRoutes    = require('./routes/rooms');
 const leaderboardRoutes = require('./routes/leaderboard');
 const uploadsRoutes        = require('./routes/uploads');
 const notificationsRoutes  = require('./routes/notifications');
+const reportsRoutes        = require('./routes/reports');
 
 require('./cron/jobs'); // register all cron jobs
 
@@ -79,6 +80,7 @@ app.use('/api/rooms',       roomsRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/uploads',        uploadsRoutes);
 app.use('/api/notifications',  notificationsRoutes);
+app.use('/api/users',          reportsRoutes);
 
 // ─── Global error handler ─────────────────────────────────────────────────────
 app.use((err, req, res, _next) => {

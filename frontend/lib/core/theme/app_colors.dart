@@ -31,6 +31,7 @@ class AppColors {
   static const Color warning = Color(0xFFFF9500);
 
   // ─── Brand tints ─────────────────────────────────────────────────
+  static const Color teal          = Color(0xFF00C7BE); // primary brand teal
   static const Color verifiedGreen = Color(0xFF34C759); // verified doctor
   static const Color verifiedBlue  = Color(0xFF007AFF); // verified student
   static const Color proGold       = Color(0xFFFFCC00); // Pro badge

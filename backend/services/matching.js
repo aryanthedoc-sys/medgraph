@@ -6,9 +6,37 @@ const { sendPush } = require('./fcm');
 const queue = new Map();
 
 // Track recent matches to avoid immediate re-match
-// Map<userId, Set<partnerId>>
 const recentMatches = new Map();
 const RECENT_MATCH_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+// ─── Connection rules ─────────────────────────────────────────────────────────
+// Returns true if user1 and user2 are allowed to be matched.
+// proSettings: { match_with_bds?: bool } from the queue-joining user.
+function canConnect(user1Role, user2Role, user1ProSettings, user2ProSettings) {
+  if (!user1Role || !user2Role) return false;
+
+  // Same role always allowed (MBBS↔MBBS, BDS↔BDS, BAMS↔BAMS, Doctor↔Doctor)
+  if (user1Role === user2Role) return true;
+
+  // MBBS ↔ Doctor: always allowed
+  const mbbsDoctor = (
+    (user1Role === 'student_mbbs' && user2Role === 'doctor') ||
+    (user1Role === 'doctor' && user2Role === 'student_mbbs')
+  );
+  if (mbbsDoctor) return true;
+
+  // BDS ↔ MBBS/Doctor: only if the MBBS/Doctor has opted in via pro filter
+  if (user1Role === 'student_bds' &&
+      (user2Role === 'student_mbbs' || user2Role === 'doctor') &&
+      user2ProSettings?.match_with_bds === true) return true;
+
+  if (user2Role === 'student_bds' &&
+      (user1Role === 'student_mbbs' || user1Role === 'doctor') &&
+      user1ProSettings?.match_with_bds === true) return true;
+
+  // Everything else: not allowed
+  return false;
+}
 
 function initSocket(io) {
   io.on('connection', (socket) => {
@@ -19,28 +47,70 @@ function initSocket(io) {
       const { userId, mode, filters } = data;
       if (!userId || typeof userId !== 'string' || userId.trim() === '') {
         console.warn('join-queue rejected: empty userId from socket', socket.id);
+        socket.emit('queue-error', { message: 'User ID missing. Please restart the app.' });
         return;
       }
 
-      // Remove any existing queue entry for this user
-      for (const [sid, entry] of queue.entries()) {
-        if (entry.userId === userId) queue.delete(sid);
+      // Check verification status
+      try {
+        const { data: user, error } = await supabaseAdmin
+          .from('users')
+          .select('is_verified, is_suspended, role, pro_filter_match_bds, pro_filter_same_college, pro_filter_same_city, pro_filter_same_state, college_name, city, state')
+          .eq('id', userId)
+          .single();
+
+        if (error || !user) {
+          socket.emit('queue-error', { message: 'User not found.' });
+          return;
+        }
+
+        if (user.is_suspended) {
+          socket.emit('queue-error', { message: 'Your account has been suspended.' });
+          return;
+        }
+
+        if (!user.is_verified) {
+          socket.emit('queue-error', {
+            message: 'Complete verification to use live matching',
+            code: 'UNVERIFIED',
+          });
+          return;
+        }
+
+        // Attach user role + pro settings to the queue entry
+        queue.delete(socket.id); // Remove any stale entry
+        for (const [sid, entry] of queue.entries()) {
+          if (entry.userId === userId) queue.delete(sid);
+        }
+
+        queue.set(socket.id, {
+          userId,
+          mode,
+          filters: filters || {},
+          socketId: socket.id,
+          joinedAt: Date.now(),
+          role: user.role,
+          proSettings: {
+            match_with_bds: user.pro_filter_match_bds || false,
+            same_college: user.pro_filter_same_college || false,
+            same_city: user.pro_filter_same_city || false,
+            same_state: user.pro_filter_same_state || false,
+          },
+          collegeName: user.college_name,
+          city: user.city,
+          state: user.state,
+        });
+      } catch (e) {
+        console.error('queue join DB check failed:', e.message);
+        socket.emit('queue-error', { message: 'Server error. Please try again.' });
+        return;
       }
 
-      queue.set(socket.id, {
-        userId,
-        mode,
-        filters: filters || {},
-        socketId: socket.id,
-        joinedAt: Date.now(),
-      });
-
-      // Try to match immediately
       const match = findMatch(socket.id);
       if (match) {
-        await createSession(io, socket.id, match.socketId, data, match);
+        await createSession(io, socket.id, match.socketId,
+          queue.get(socket.id), match);
       } else {
-        // If no match in 30s, timeout
         setTimeout(() => {
           if (queue.has(socket.id)) {
             queue.delete(socket.id);
@@ -86,8 +156,26 @@ function findMatch(requestorSocketId) {
     if (candidate.mode !== requestor.mode) continue;
     if (wasRecentMatch(requestor.userId, candidate.userId)) continue;
 
-    // Filters are best-effort — the more that match, the better, but we
-    // don't hard-block on them to keep queue times short
+    // Connection rules check
+    if (!canConnect(
+      requestor.role, candidate.role,
+      requestor.proSettings, candidate.proSettings
+    )) continue;
+
+    // Pro filters (best-effort, non-blocking)
+    if (requestor.proSettings?.same_college && candidate.proSettings?.same_college) {
+      if (requestor.collegeName && candidate.collegeName &&
+          requestor.collegeName !== candidate.collegeName) continue;
+    }
+    if (requestor.proSettings?.same_city && candidate.proSettings?.same_city) {
+      if (requestor.city && candidate.city &&
+          requestor.city !== candidate.city) continue;
+    }
+    if (requestor.proSettings?.same_state && candidate.proSettings?.same_state) {
+      if (requestor.state && candidate.state &&
+          requestor.state !== candidate.state) continue;
+    }
+
     return candidate;
   }
   return null;
@@ -116,7 +204,6 @@ async function createSession(io, socketId1, socketId2, data1, data2) {
   queue.delete(socketId2);
   recordRecentMatch(data1.userId, data2.userId);
 
-  // Persist session to DB
   try {
     await supabaseAdmin.from('sessions').insert({
       id: uuidv4(),
@@ -132,17 +219,15 @@ async function createSession(io, socketId1, socketId2, data1, data2) {
     console.error('Failed to persist session:', e);
   }
 
-  // Join both sockets to the room so socket.to(roomId) relay events work
   const s1 = io.sockets.sockets.get(socketId1);
   const s2 = io.sockets.sockets.get(socketId2);
   if (s1) s1.join(roomId);
   if (s2) s2.join(roomId);
 
-  // Notify both users via socket (they may be in the app)
   io.to(socketId1).emit('match-found', {
     roomId,
     partnerId: data2.userId,
-    partnerName: 'Your match', // enriched client-side
+    partnerName: 'Your match',
   });
   io.to(socketId2).emit('match-found', {
     roomId,
@@ -150,7 +235,6 @@ async function createSession(io, socketId1, socketId2, data1, data2) {
     partnerName: 'Your match',
   });
 
-  // Also push to users who may have backgrounded the app
   try {
     const [{ data: u1 }, { data: u2 }] = await Promise.all([
       supabaseAdmin.from('users').select('full_name, fcm_token').eq('id', data1.userId).single(),
@@ -173,4 +257,4 @@ async function createSession(io, socketId1, socketId2, data1, data2) {
   }
 }
 
-module.exports = { initSocket };
+module.exports = { initSocket, canConnect };

@@ -2,11 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/mg_button.dart';
 import '../../../shared/services/api_service.dart';
+import '../../../shared/services/auth_storage.dart';
 
 class OTPScreen extends StatefulWidget {
   const OTPScreen({super.key, required this.email});
@@ -21,6 +21,7 @@ class _OTPScreenState extends State<OTPScreen> {
   final _focusNodes = List.generate(6, (_) => FocusNode());
   bool _loading = false;
   String? _error;
+  String? _debugError;
   int _resendCooldown = 30;
   Timer? _timer;
 
@@ -53,24 +54,45 @@ class _OTPScreenState extends State<OTPScreen> {
   bool get _isComplete => _otp.length == 6;
 
   Future<void> _verify() async {
-    setState(() { _error = null; _loading = true; });
+    setState(() { _error = null; _debugError = null; _loading = true; });
     try {
       final res = await ApiService.post('/api/auth/verify-otp', {
         'email': widget.email,
         'otp': _otp,
       });
-      // Sign in with the returned custom token via Supabase
-      await Supabase.instance.client.auth.signInWithPassword(
-        email: widget.email,
-        password: res['tempPassword'] as String,
-      );
+      // ignore: avoid_print
+      print('Verify response: $res');
+
+      if (res['ok'] != true) {
+        setState(() => _error = 'Verification failed. Please try again.');
+        return;
+      }
+
+      final accessToken = res['accessToken'] as String?;
+      if (accessToken == null || accessToken.isEmpty) {
+        setState(() => _error = 'No token returned from server. Please try again.');
+        return;
+      }
+      final userId = res['userId'] as String?;
+      // ignore: avoid_print
+      print('OTP verified — userId: $userId');
+
+      // Persist token + userId; all subsequent API calls use AuthStorage
+      await AuthStorage.save(accessToken, userId: userId);
+
       if (!mounted) return;
+      // All new users go to proof upload; returning users go home
       final isNewUser = res['isNewUser'] as bool? ?? true;
-      context.go(isNewUser ? '/register/profile-setup' : '/home');
+      context.go(isNewUser ? '/register/proof-upload' : '/home');
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      setState(() {
+        _error = e.message;
+        _debugError = e.debugInfo?['message'] as String?;
+      });
     } catch (e) {
-      setState(() => _error = 'Verification failed. Please try again.');
+      // ignore: avoid_print
+      print('OTP verify error: $e');
+      setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -91,7 +113,7 @@ class _OTPScreenState extends State<OTPScreen> {
     final sub = isDark ? AppColors.darkSecondary : AppColors.lightSecondary;
 
     return Scaffold(
-      appBar: AppBar(leading: BackButton(onPressed: () => context.go('/register/student'))),
+      appBar: AppBar(leading: BackButton(onPressed: () => context.go('/register'))),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -139,9 +161,24 @@ class _OTPScreenState extends State<OTPScreen> {
                     color: AppColors.danger.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(
-                    _error!,
-                    style: AppTextStyles.footnote.copyWith(color: AppColors.danger),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _error!,
+                        style: AppTextStyles.footnote.copyWith(color: AppColors.danger),
+                      ),
+                      if (_debugError != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'Debug: $_debugError',
+                          style: AppTextStyles.footnote.copyWith(
+                            color: AppColors.danger.withValues(alpha: 0.7),
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],

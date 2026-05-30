@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../shared/services/auth_storage.dart';
 
 class LandingFooter extends StatelessWidget {
   const LandingFooter({super.key, required this.isMobile});
   final bool isMobile;
 
   void _nav(BuildContext context, String route) {
-    final isLoggedIn = Supabase.instance.client.auth.currentSession != null;
+    final isLoggedIn = AuthStorage.isLoggedIn;
     final protectedRoutes = {
       '/match', '/feed', '/sessions', '/leaderboard',
       '/upgrade', '/profile', '/rankings/weekly',
@@ -105,6 +105,7 @@ class LandingFooter extends StatelessWidget {
         _FooterColumn('Community', [
           _FooterLink('For Students',       () => context.push('/register')),
           _FooterLink('For Doctors',        () => context.push('/register')),
+          _FooterLink('Allied Health',      () => context.push('/allied-health')),
           _FooterLink('MedGraph Fellows',   () => _nav(context, '/rankings/weekly')),
           _FooterLink('Creator Program',    () => _nav(context, '/profile')),
         ]),
@@ -145,6 +146,7 @@ class LandingFooter extends StatelessWidget {
             _mobileLink(context, 'About', () => context.push('/about')),
             _mobileLink(context, 'Blog', () => context.push('/blog')),
             _mobileLink(context, 'Contact', () => context.push('/contact')),
+            _mobileLink(context, 'Allied Health', () => context.push('/allied-health')),
           ],
         ),
       ],

@@ -6,6 +6,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../shared/widgets/mg_button.dart';
 import '../../../shared/services/socket_service.dart';
+import '../../../shared/services/auth_storage.dart';
 import '../../video/screens/video_call_screen.dart';
 
 enum _MatchState { idle, searching }
@@ -40,7 +41,7 @@ class _RouletteScreenState extends ConsumerState<RouletteScreen>
   void _setupSocketListeners() {
     SocketService.on('match-found', (data) {
       if (!mounted) return;
-      final roomId = data['roomId'] as String;
+      final roomId      = data['roomId'] as String;
       final partnerName = data['partnerName'] as String? ?? 'Your match';
       final partnerCollege = data['partnerCollege'] as String? ?? '';
       Navigator.of(context).push(MaterialPageRoute(
@@ -58,18 +59,48 @@ class _RouletteScreenState extends ConsumerState<RouletteScreen>
       setState(() => _state = _MatchState.idle);
       _showNoMatchDialog();
     });
+
+    // Handle server-side errors (unverified, suspended, etc.)
+    SocketService.on('queue-error', (data) {
+      if (!mounted) return;
+      setState(() => _state = _MatchState.idle);
+      final code    = data['code'] as String?;
+      final message = data['message'] as String? ?? 'Could not join queue.';
+      if (code == 'UNVERIFIED') {
+        _showVerificationSheet();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      }
+    });
   }
 
   void _startSearch() {
-    final user = ref.read(currentUserProvider);
+    final user   = ref.read(currentUserProvider);
+    final userId = (user?.id.isNotEmpty == true) ? user!.id : AuthStorage.userId;
+
+    if (userId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Not signed in — please restart the app.')),
+      );
+      return;
+    }
+
+    // Client-side verification check — server also checks, but this gives instant UX
+    if (user != null && !user.isVerified) {
+      _showVerificationSheet();
+      return;
+    }
 
     setState(() => _state = _MatchState.searching);
 
-    SocketService.connect();
-    SocketService.emit('join-queue', {
-      'userId': user?.id ?? '',
-      'mode': _mode,
-      'filters': {},
+    SocketService.connect(onConnected: () {
+      SocketService.emit('join-queue', {
+        'userId': userId,
+        'mode': _mode,
+        'filters': {},
+      });
     });
   }
 
@@ -103,32 +134,104 @@ class _RouletteScreenState extends ConsumerState<RouletteScreen>
     );
   }
 
+  void _showVerificationSheet() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => Container(
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkSurface : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(28),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60, height: 60,
+                decoration: BoxDecoration(
+                  color: AppColors.teal.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.verified_user_outlined,
+                    color: AppColors.teal, size: 32),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Verification required',
+                style: AppTextStyles.title2.copyWith(
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Upload your credentials to access live matching. '
+                'This keeps MedGraph safe for everyone.',
+                style: AppTextStyles.body.copyWith(
+                  color: isDark ? AppColors.darkSecondary : AppColors.lightSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              MGButton(
+                label: 'Upload now',
+                onPressed: () {
+                  Navigator.pop(context);
+                  context.push('/register/proof-upload');
+                },
+              ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  context.go('/sessions');
+                },
+                child: Text(
+                  'Book a session instead',
+                  style: TextStyle(
+                    color: isDark ? AppColors.darkSecondary : AppColors.lightSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _pulseCtrl.dispose();
     SocketService.off('match-found');
     SocketService.off('queue-timeout');
+    SocketService.off('queue-error');
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final user   = ref.watch(currentUserProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final text = isDark ? Colors.white : Colors.black;
-    final sub = isDark ? AppColors.darkSecondary : AppColors.lightSecondary;
+    final text   = isDark ? Colors.white : Colors.black;
+    final sub    = isDark ? AppColors.darkSecondary : AppColors.lightSecondary;
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(isMobile ? 20 : 32),
           child: Column(
             children: [
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text('Match', style: AppTextStyles.largeTitle.copyWith(color: text)),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -136,7 +239,14 @@ class _RouletteScreenState extends ConsumerState<RouletteScreen>
                   style: AppTextStyles.body.copyWith(color: sub),
                 ),
               ),
-              const SizedBox(height: 32),
+
+              // Unverified warning
+              if (user != null && !user.isVerified) ...[
+                const SizedBox(height: 16),
+                _UnverifiedBanner(onTap: _showVerificationSheet),
+              ],
+
+              const SizedBox(height: 24),
 
               // Mode selector
               Container(
@@ -147,18 +257,14 @@ class _RouletteScreenState extends ConsumerState<RouletteScreen>
                 padding: const EdgeInsets.all(4),
                 child: Row(
                   children: [
-                    _ModeTab(label: 'Study', value: 'study', current: _mode,
-                        onTap: (v) => setState(() => _mode = v)),
-                    _ModeTab(label: 'Clinical', value: 'clinical', current: _mode,
-                        onTap: (v) => setState(() => _mode = v)),
-                    _ModeTab(label: 'Casual', value: 'casual', current: _mode,
-                        onTap: (v) => setState(() => _mode = v)),
+                    _ModeTab(label: 'Study',    value: 'study',    current: _mode, onTap: (v) => setState(() => _mode = v)),
+                    _ModeTab(label: 'Clinical', value: 'clinical', current: _mode, onTap: (v) => setState(() => _mode = v)),
+                    _ModeTab(label: 'Casual',   value: 'casual',   current: _mode, onTap: (v) => setState(() => _mode = v)),
                   ],
                 ),
               ),
               const Spacer(),
 
-              // Centre animation
               if (_state == _MatchState.searching)
                 _SearchingAnimation(pulse: _pulse)
               else
@@ -181,10 +287,8 @@ class _RouletteScreenState extends ConsumerState<RouletteScreen>
                   ],
                 )
               else
-                Text(
-                  'Tap to start a session',
-                  style: AppTextStyles.subheadline.copyWith(color: sub),
-                ),
+                Text('Tap to start a session',
+                    style: AppTextStyles.subheadline.copyWith(color: sub)),
 
               const Spacer(),
               MGButton(
@@ -194,6 +298,40 @@ class _RouletteScreenState extends ConsumerState<RouletteScreen>
               const SizedBox(height: 8),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UnverifiedBanner extends StatelessWidget {
+  const _UnverifiedBanner({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.amber.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 16),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'You need to verify to use live matching',
+                style: TextStyle(fontSize: 13, color: Color(0xFF7A5600)),
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.amber, size: 16),
+          ],
         ),
       ),
     );
@@ -210,8 +348,7 @@ class _IdleMatchButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 140,
-        height: 140,
+        width: 140, height: 140,
         decoration: BoxDecoration(
           color: isDark ? Colors.white : Colors.black,
           shape: BoxShape.circle,
@@ -236,10 +373,11 @@ class _SearchingAnimation extends StatelessWidget {
     return ScaleTransition(
       scale: pulse,
       child: Container(
-        width: 140,
-        height: 140,
+        width: 140, height: 140,
         decoration: BoxDecoration(
-          color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.1)
+              : Colors.black.withValues(alpha: 0.05),
           shape: BoxShape.circle,
           border: Border.all(
             color: isDark ? Colors.white : Colors.black,
@@ -248,8 +386,7 @@ class _SearchingAnimation extends StatelessWidget {
         ),
         child: Center(
           child: SizedBox(
-            width: 40,
-            height: 40,
+            width: 40, height: 40,
             child: CircularProgressIndicator(
               strokeWidth: 2.5,
               valueColor: AlwaysStoppedAnimation(
@@ -277,7 +414,7 @@ class _ModeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark   = Theme.of(context).brightness == Brightness.dark;
     final isActive = value == current;
     return Expanded(
       child: GestureDetector(
@@ -286,9 +423,7 @@ class _ModeTab extends StatelessWidget {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isActive
-                ? (isDark ? Colors.white : Colors.black)
-                : Colors.transparent,
+            color: isActive ? (isDark ? Colors.white : Colors.black) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Center(

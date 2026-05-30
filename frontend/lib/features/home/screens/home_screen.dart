@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../shared/models/user_model.dart';
 import '../../../shared/widgets/mg_button.dart';
 import '../../../shared/widgets/mg_card.dart';
 import '../../../shared/widgets/disclaimer_overlay.dart';
@@ -111,6 +112,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ],
                     ),
                     const SizedBox(height: 24),
+
+                    // Verification banner
+                    if (user != null && !user.isVerified) ...[
+                      _HomeVerificationBanner(user: user),
+                      const SizedBox(height: 16),
+                    ],
 
                     // Streak card
                     StreakCard(
@@ -393,6 +400,48 @@ class _ModeTab extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeVerificationBanner extends StatelessWidget {
+  const _HomeVerificationBanner({required this.user});
+  final UserModel user;
+
+  @override
+  Widget build(BuildContext context) {
+    final isSubmitted = user.isProofSubmitted;
+    return GestureDetector(
+      onTap: isSubmitted ? null : () => context.push('/register/proof-upload'),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.amber.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 16),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                isSubmitted
+                    ? 'Verification under review — our team will contact you within 24h'
+                    : 'Verification pending — Upload your proof to get your verified badge',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF7A5600),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            if (!isSubmitted)
+              const Icon(Icons.chevron_right, color: Colors.amber, size: 16),
+          ],
         ),
       ),
     );

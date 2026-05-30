@@ -4,252 +4,541 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MedGraph Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-           background: #000; color: #fff; min-height: 100vh; }
-    #login { display: flex; align-items: center; justify-content: center;
-             min-height: 100vh; }
-    .login-box { background: #1c1c1e; border-radius: 16px; padding: 40px;
-                 width: 100%; max-width: 360px; }
-    h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
-    p.sub { color: #8e8e93; font-size: 14px; margin-bottom: 24px; }
-    input { width: 100%; background: #2c2c2e; border: none; border-radius: 10px;
-            padding: 14px 16px; color: #fff; font-size: 16px; margin-bottom: 12px; }
-    input:focus { outline: 2px solid #fff; }
-    button { width: 100%; background: #fff; color: #000; border: none;
-             border-radius: 10px; padding: 14px; font-size: 16px;
-             font-weight: 600; cursor: pointer; }
-    button:hover { opacity: 0.9; }
-    button.danger { background: #ff3b30; color: #fff; }
-    button.approve { background: #34c759; color: #fff; }
-    button.sm { width: auto; padding: 6px 14px; font-size: 13px; border-radius: 8px; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #f5f5f7; color: #1d1d1f; min-height: 100vh; }
 
+    /* ── Login ─────────────────────────── */
+    #login { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+    .login-card { background: #fff; border-radius: 20px; padding: 40px; width: 100%; max-width: 380px;
+                  box-shadow: 0 4px 32px rgba(0,0,0,.08); }
+    .login-card .logo { font-size: 22px; font-weight: 700; color: #00C7BE; margin-bottom: 8px; }
+    .login-card h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .login-card p { color: #6e6e73; font-size: 14px; margin-bottom: 28px; }
+    label { display: block; font-size: 13px; font-weight: 500; color: #6e6e73; margin-bottom: 6px; }
+    input[type=email], input[type=password], input[type=text] {
+      width: 100%; border: 1.5px solid #e5e5ea; border-radius: 10px; padding: 12px 14px;
+      font-size: 15px; font-family: inherit; background: #fff; transition: border .15s; margin-bottom: 16px; }
+    input:focus { outline: none; border-color: #00C7BE; }
+    .btn { display: inline-block; border: none; border-radius: 10px; padding: 12px 22px; font-size: 15px;
+           font-weight: 600; font-family: inherit; cursor: pointer; transition: opacity .15s; }
+    .btn:hover { opacity: .88; }
+    .btn-primary { background: #00C7BE; color: #fff; width: 100%; }
+    .btn-success { background: #34c759; color: #fff; }
+    .btn-danger  { background: #ff3b30; color: #fff; }
+    .btn-warn    { background: #ff9500; color: #fff; }
+    .btn-ghost   { background: #f2f2f7; color: #1d1d1f; }
+    .btn-sm      { padding: 7px 14px; font-size: 13px; border-radius: 8px; }
+
+    /* ── App shell ─────────────────────── */
     #app { display: none; }
-    .header { background: #1c1c1e; padding: 16px 24px; display: flex;
-              align-items: center; border-bottom: 1px solid #2c2c2e; }
-    .header h2 { font-size: 18px; font-weight: 700; flex: 1; }
-    .tabs { display: flex; gap: 8px; padding: 16px 24px 0; }
-    .tab { padding: 10px 20px; border-radius: 10px 10px 0 0; cursor: pointer;
-           font-size: 14px; font-weight: 500; background: #1c1c1e; color: #8e8e93; }
-    .tab.active { background: #2c2c2e; color: #fff; }
-    .content { padding: 24px; }
-    table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 10px 12px; font-size: 12px; color: #8e8e93;
-         border-bottom: 1px solid #2c2c2e; text-transform: uppercase; }
-    td { padding: 12px; border-bottom: 1px solid #1c1c1e; font-size: 14px;
-         vertical-align: middle; }
-    tr:hover td { background: #1c1c1e; }
-    .badge { display: inline-block; padding: 3px 8px; border-radius: 20px;
-             font-size: 11px; font-weight: 600; }
-    .badge.pending { background: rgba(255,149,0,0.15); color: #ff9500; }
-    .badge.verified { background: rgba(52,199,89,0.15); color: #34c759; }
-    .badge.suspended { background: rgba(255,59,48,0.15); color: #ff3b30; }
-    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
-    .stat-card { background: #1c1c1e; border-radius: 12px; padding: 20px; }
-    .stat-card .num { font-size: 32px; font-weight: 800; }
-    .stat-card .lbl { font-size: 13px; color: #8e8e93; margin-top: 4px; }
-    .error { color: #ff3b30; font-size: 13px; margin-top: 8px; }
-    a { color: #0a84ff; text-decoration: none; }
+    .topbar { background: #fff; border-bottom: 1px solid #e5e5ea; padding: 0 24px;
+              display: flex; align-items: center; height: 60px; gap: 12px; position: sticky; top: 0; z-index: 10; }
+    .topbar .logo { font-size: 18px; font-weight: 700; color: #00C7BE; flex: 1; }
+    .topbar span { font-size: 13px; color: #6e6e73; }
+    .topbar button { background: none; border: 1px solid #e5e5ea; border-radius: 8px; padding: 6px 14px;
+                     font-size: 13px; font-family: inherit; cursor: pointer; }
+
+    /* ── Tabs ──────────────────────────── */
+    .tabs { display: flex; gap: 4px; padding: 20px 24px 0; background: #f5f5f7; flex-wrap: wrap; }
+    .tab { padding: 10px 20px; border-radius: 10px 10px 0 0; font-size: 14px; font-weight: 500;
+           cursor: pointer; background: #e5e5ea; color: #6e6e73; transition: all .15s; border: none;
+           font-family: inherit; }
+    .tab.active { background: #fff; color: #00C7BE; font-weight: 600; }
+
+    /* ── Content ───────────────────────── */
+    .content { background: #fff; border-radius: 0 12px 12px 12px; margin: 0 24px 24px;
+               padding: 24px; min-height: 400px; }
+    @media (max-width: 600px) {
+      .content { margin: 0 12px 12px; padding: 16px; }
+      .tabs { padding: 16px 12px 0; }
+      .tab { padding: 8px 14px; font-size: 13px; }
+    }
+
+    /* ── Stats bar ─────────────────────── */
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .stat-card { background: #f5f5f7; border-radius: 12px; padding: 16px; }
+    .stat-card .val { font-size: 28px; font-weight: 700; color: #00C7BE; }
+    .stat-card .lbl { font-size: 12px; color: #6e6e73; margin-top: 4px; }
+
+    /* ── Table ─────────────────────────── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { background: #f5f5f7; padding: 10px 12px; text-align: left; font-weight: 600; font-size: 13px;
+         color: #6e6e73; white-space: nowrap; }
+    td { padding: 12px 12px; border-bottom: 1px solid #f2f2f7; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f9f9fb; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .badge-verified  { background: #d1fae5; color: #065f46; }
+    .badge-pending   { background: #fef3c7; color: #92400e; }
+    .badge-submitted { background: #dbeafe; color: #1e40af; }
+    .badge-suspended { background: #fee2e2; color: #991b1b; }
+    .badge-rejected  { background: #f3f4f6; color: #374151; }
+
+    /* ── Search bar ─────────────────────── */
+    .search-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .search-row input { flex: 1; min-width: 200px; }
+    .search-row select { border: 1.5px solid #e5e5ea; border-radius: 10px; padding: 10px 12px;
+                         font-size: 14px; font-family: inherit; background: #fff; cursor: pointer; }
+
+    /* ── Pagination ─────────────────────── */
+    .pagination { display: flex; gap: 8px; margin-top: 16px; align-items: center; flex-wrap: wrap; }
+    .pagination button { background: #f2f2f7; border: none; border-radius: 8px; padding: 7px 14px;
+                         font-size: 13px; font-family: inherit; cursor: pointer; }
+    .pagination button.active { background: #00C7BE; color: #fff; }
+
+    /* ── Modal ─────────────────────────── */
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 100;
+                align-items: center; justify-content: center; padding: 24px; }
+    .modal-bg.show { display: flex; }
+    .modal { background: #fff; border-radius: 16px; padding: 28px; width: 100%; max-width: 440px; }
+    .modal h3 { font-size: 18px; margin-bottom: 12px; }
+    .modal p { font-size: 14px; color: #6e6e73; margin-bottom: 16px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+
+    .empty { color: #6e6e73; font-size: 14px; padding: 32px 0; text-align: center; }
+    .loading { color: #6e6e73; font-size: 14px; padding: 24px 0; text-align: center; }
+    .error-msg { color: #ff3b30; font-size: 13px; margin-top: 8px; }
   </style>
 </head>
 <body>
 
-<!-- Login -->
+<!-- ── Login ─────────────────────────────────────────────────────────────── -->
 <div id="login">
-  <div class="login-box">
-    <h1>MedGraph Admin</h1>
-    <p class="sub">Enter your admin password to continue.</p>
-    <input type="password" id="pwdInput" placeholder="Admin password" />
-    <div id="loginError" class="error"></div>
-    <button onclick="doLogin()" style="margin-top:8px">Sign in</button>
+  <div class="login-card">
+    <div class="logo">MedGraph</div>
+    <h1>Admin Panel</h1>
+    <p>Sign in to manage verifications and users</p>
+    <div>
+      <label>Email</label>
+      <input type="email" id="loginEmail" placeholder="admin@medgraph.in" value="aryandevagarwal89000@gmail.com">
+      <label>Password</label>
+      <input type="password" id="loginPwd" placeholder="Admin password" onkeydown="if(event.key==='Enter')doLogin()">
+      <p id="loginErr" class="error-msg"></p>
+      <button class="btn btn-primary" onclick="doLogin()" style="margin-top:8px">Sign in</button>
+    </div>
   </div>
 </div>
 
-<!-- Main app -->
+<!-- ── App ───────────────────────────────────────────────────────────────── -->
 <div id="app">
-  <div class="header">
-    <h2>MedGraph Admin</h2>
-    <span style="color:#8e8e93;font-size:13px" id="headerStats"></span>
+  <div class="topbar">
+    <span class="logo">MedGraph Admin</span>
+    <span id="adminEmail"></span>
+    <button onclick="logout()">Sign out</button>
   </div>
 
   <div class="tabs">
-    <div class="tab active" onclick="showTab('pending')">Pending Doctors</div>
-    <div class="tab" onclick="showTab('reports')">Reports</div>
-    <div class="tab" onclick="showTab('stats')">Stats</div>
+    <button class="tab active" onclick="switchTab('pending')">Pending Reviews</button>
+    <button class="tab" onclick="switchTab('flagged')">Flagged Users</button>
+    <button class="tab" onclick="switchTab('all')">All Users</button>
+    <button class="tab" onclick="switchTab('stats')">Stats</button>
   </div>
 
   <div class="content">
-    <!-- Pending doctors -->
+    <!-- Pending Reviews -->
     <div id="tab-pending">
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th><th>MRN</th><th>Specialty</th>
-            <th>Submitted</th><th>ID Doc</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="pendingBody"></tbody>
-      </table>
-      <p id="pendingEmpty" style="color:#8e8e93;display:none;margin-top:16px">
-        No pending doctors 🎉
-      </p>
+      <h2 style="margin-bottom:20px;font-size:18px">Pending Verifications</h2>
+      <div class="table-wrap" id="pendingTable"><div class="loading">Loading…</div></div>
     </div>
 
-    <!-- Reports -->
-    <div id="tab-reports" style="display:none">
-      <table>
-        <thead>
-          <tr>
-            <th>Reporter</th><th>Reported</th><th>Reason</th>
-            <th>Date</th><th>Action</th>
-          </tr>
-        </thead>
-        <tbody id="reportsBody"></tbody>
-      </table>
+    <!-- Flagged Users -->
+    <div id="tab-flagged" style="display:none">
+      <h2 style="margin-bottom:20px;font-size:18px">Flagged Users (3+ reports)</h2>
+      <div class="table-wrap" id="flaggedTable"><div class="loading">Loading…</div></div>
+    </div>
+
+    <!-- All Users -->
+    <div id="tab-all" style="display:none">
+      <h2 style="margin-bottom:20px;font-size:18px">All Users</h2>
+      <div class="search-row">
+        <input type="text" id="userSearch" placeholder="Search by name or email…" oninput="filterAllUsers()">
+        <select id="statusFilter" onchange="loadAllUsers()">
+          <option value="">All statuses</option>
+          <option value="pending_verification">Pending</option>
+          <option value="proof_submitted">Proof submitted</option>
+          <option value="verified">Verified</option>
+          <option value="rejected">Rejected</option>
+          <option value="suspended">Suspended</option>
+        </select>
+        <select id="roleFilter" onchange="loadAllUsers()">
+          <option value="">All roles</option>
+          <option value="student_mbbs">MBBS Student</option>
+          <option value="student_bds">BDS Student</option>
+          <option value="student_bams">BAMS Student</option>
+          <option value="doctor">Doctor</option>
+        </select>
+      </div>
+      <div class="table-wrap" id="allTable"><div class="loading">Loading…</div></div>
+      <div class="pagination" id="allPagination"></div>
     </div>
 
     <!-- Stats -->
     <div id="tab-stats" style="display:none">
-      <div class="stat-grid" id="statsGrid"></div>
+      <h2 style="margin-bottom:20px;font-size:18px">Platform Stats</h2>
+      <div class="stats" id="statsGrid"><div class="loading">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Reject modal ───────────────────────────────────────────────────────── -->
+<div class="modal-bg" id="rejectModal">
+  <div class="modal">
+    <h3>Reject verification</h3>
+    <p>The user will receive this reason by email.</p>
+    <label>Reason</label>
+    <input type="text" id="rejectReason" placeholder="e.g. ID card unclear, please resubmit">
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn btn-ghost" onclick="closeModal('rejectModal')">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmReject()">Reject</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Suspend modal ──────────────────────────────────────────────────────── -->
+<div class="modal-bg" id="suspendModal">
+  <div class="modal">
+    <h3>Suspend user</h3>
+    <p>The user will be notified and blocked from the app.</p>
+    <label>Reason (optional)</label>
+    <input type="text" id="suspendReason" placeholder="e.g. Fake credentials confirmed">
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn btn-ghost" onclick="closeModal('suspendModal')">Cancel</button>
+      <button class="btn btn-warn" onclick="confirmSuspend()">Suspend</button>
     </div>
   </div>
 </div>
 
 <script>
-  let password = '';
-  const BASE = '/api/admin';
+  const BASE = '';  // same origin
+  let adminPwd = '';
+  let pendingUsers = [];
+  let allUsers = [];
+  let allPage = 1;
+  let allTotal = 0;
+  const PAGE_SIZE = 50;
+  let _pendingUserId = null;
 
-  function headers() {
-    return { 'Content-Type': 'application/json', 'x-admin-password': password };
+  const ROLE_LABEL = {
+    student_mbbs: 'MBBS', student_bds: 'BDS', student_bams: 'BAMS', doctor: 'Doctor',
+    student: 'Student', // legacy
+  };
+  const STATUS_BADGE = {
+    verified: 'badge-verified', proof_submitted: 'badge-submitted',
+    pending_verification: 'badge-pending', suspended: 'badge-suspended', rejected: 'badge-rejected',
+  };
+
+  // ── Auth ──
+  function doLogin() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const pwd   = document.getElementById('loginPwd').value;
+    if (!pwd) { document.getElementById('loginErr').textContent = 'Enter password'; return; }
+    adminPwd = pwd;
+    // Test credentials with a lightweight API call
+    fetch(`${BASE}/api/admin/stats?password=${encodeURIComponent(pwd)}`)
+      .then(r => {
+        if (r.status === 401) throw new Error('Wrong password');
+        return r.json();
+      })
+      .then(() => {
+        document.getElementById('login').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        document.getElementById('adminEmail').textContent = email;
+        loadTab('pending');
+      })
+      .catch(e => { document.getElementById('loginErr').textContent = e.message; });
   }
 
-  async function doLogin() {
-    password = document.getElementById('pwdInput').value;
-    const res = await fetch(`${BASE}/stats`, { headers: headers() });
-    if (res.ok) {
-      document.getElementById('login').style.display = 'none';
-      document.getElementById('app').style.display = 'block';
-      loadAll();
-    } else {
-      document.getElementById('loginError').textContent = 'Incorrect password.';
+  function logout() {
+    adminPwd = '';
+    document.getElementById('login').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('loginPwd').value = '';
+  }
+
+  // ── Tabs ──
+  function switchTab(name) {
+    ['pending','flagged','all','stats'].forEach(t => {
+      document.getElementById('tab-'+t).style.display = (t===name) ? '' : 'none';
+    });
+    document.querySelectorAll('.tab').forEach((el, i) => {
+      el.classList.toggle('active', ['pending','flagged','all','stats'][i] === name);
+    });
+    loadTab(name);
+  }
+
+  function loadTab(name) {
+    if (name === 'pending') loadPending();
+    else if (name === 'flagged') loadFlagged();
+    else if (name === 'all') { allPage = 1; loadAllUsers(); }
+    else if (name === 'stats') loadStats();
+  }
+
+  // ── API helper ──
+  async function api(path, opts = {}) {
+    const sep = path.includes('?') ? '&' : '?';
+    const res = await fetch(`${BASE}${path}${sep}password=${encodeURIComponent(adminPwd)}`, {
+      headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPwd },
+      ...opts,
+    });
+    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+    return res.json();
+  }
+
+  async function post(path, body) {
+    return api(path, { method: 'POST', body: JSON.stringify(body) });
+  }
+
+  // ── Pending ──
+  async function loadPending() {
+    document.getElementById('pendingTable').innerHTML = '<div class="loading">Loading…</div>';
+    try {
+      const { users } = await api('/api/admin/pending-verifications');
+      pendingUsers = users || [];
+      renderPendingTable(pendingUsers);
+    } catch(e) {
+      document.getElementById('pendingTable').innerHTML = `<div class="empty">Error: ${e.message}</div>`;
     }
   }
 
-  document.getElementById('pwdInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') doLogin();
-  });
-
-  function showTab(name) {
-    ['pending','reports','stats'].forEach(t => {
-      document.getElementById('tab-' + t).style.display = t === name ? 'block' : 'none';
-    });
-    document.querySelectorAll('.tab').forEach((el, i) => {
-      el.classList.toggle('active', ['pending','reports','stats'][i] === name);
-    });
+  function renderPendingTable(users) {
+    if (!users.length) {
+      document.getElementById('pendingTable').innerHTML = '<div class="empty">No pending verifications</div>';
+      return;
+    }
+    let html = `<table><thead><tr>
+      <th>Name</th><th>Email</th><th>Type</th><th>College</th><th>Proof</th><th>Actions</th>
+    </tr></thead><tbody>`;
+    for (const u of users) {
+      html += `<tr>
+        <td><strong>${esc(u.full_name)}</strong><br><small style="color:#6e6e73">${esc(u.id.slice(0,8))}</small></td>
+        <td>${esc(u.email)}</td>
+        <td>${ROLE_LABEL[u.role]||u.role}</td>
+        <td>${esc(u.college_name||'')}${u.year_of_study?`<br><small>${u.year_of_study}</small>`:''}</td>
+        <td>${u.verification_proof_url?`<a href="${u.verification_proof_url}" target="_blank" class="btn btn-ghost btn-sm">View proof</a>`:'<span style="color:#aaa">None</span>'}</td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-success btn-sm" onclick="verifyUser('${u.id}')">Verify ✓</button>
+          <button class="btn btn-danger btn-sm" onclick="openRejectModal('${u.id}')">Reject ✗</button>
+          <button class="btn btn-warn btn-sm" onclick="openSuspendModal('${u.id}')">Suspend</button>
+        </td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    document.getElementById('pendingTable').innerHTML = html;
   }
 
-  function loadAll() {
-    loadPending();
-    loadReports();
-    loadStats();
+  // ── Flagged ──
+  async function loadFlagged() {
+    document.getElementById('flaggedTable').innerHTML = '<div class="loading">Loading…</div>';
+    try {
+      const { users } = await api('/api/admin/flagged-users');
+      renderFlaggedTable(users || []);
+    } catch(e) {
+      document.getElementById('flaggedTable').innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+    }
   }
 
-  async function loadPending() {
-    const res  = await fetch(`${BASE}/pending-doctors`, { headers: headers() });
-    const data = await res.json();
-    const doctors = data.doctors || [];
-    const body = document.getElementById('pendingBody');
-    body.innerHTML = '';
-    document.getElementById('pendingEmpty').style.display =
-      doctors.length === 0 ? 'block' : 'none';
-
-    doctors.forEach(d => {
-      const date = new Date(d.created_at).toLocaleDateString('en-IN');
-      body.innerHTML += `
-        <tr id="row-${d.id}">
-          <td><strong>${esc(d.full_name)}</strong><br>
-              <span style="color:#8e8e93;font-size:12px">${esc(d.email)}</span></td>
-          <td>${esc(d.mrn)}</td>
-          <td>${esc(d.specialty || '—')}</td>
-          <td>${date}</td>
-          <td>${d.id_photo_url
-            ? `<a href="${esc(d.id_photo_url)}" target="_blank">View doc</a>`
-            : '—'}</td>
-          <td style="display:flex;gap:8px">
-            <button class="sm approve" onclick="approve('${d.id}')">Approve</button>
-            <button class="sm danger" onclick="reject('${d.id}')">Reject</button>
-          </td>
-        </tr>`;
-    });
+  function renderFlaggedTable(users) {
+    if (!users.length) {
+      document.getElementById('flaggedTable').innerHTML = '<div class="empty">No flagged users</div>';
+      return;
+    }
+    let html = `<table><thead><tr>
+      <th>Name</th><th>Email</th><th>Type</th><th>Reports</th><th>Reasons</th><th>Status</th><th>Actions</th>
+    </tr></thead><tbody>`;
+    for (const u of users) {
+      const st = u.status || 'unknown';
+      html += `<tr>
+        <td><strong>${esc(u.full_name)}</strong></td>
+        <td>${esc(u.email)}</td>
+        <td>${ROLE_LABEL[u.role]||u.role}</td>
+        <td style="font-weight:700;color:#ff3b30">${u.report_count}</td>
+        <td style="font-size:12px;color:#6e6e73">${(u.report_reasons||[]).join(', ')||'—'}</td>
+        <td><span class="badge ${STATUS_BADGE[st]||''}">${st}</span></td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap">
+          ${u.is_suspended
+            ? `<button class="btn btn-ghost btn-sm" onclick="unsuspendUser('${u.id}')">Unsuspend</button>`
+            : `<button class="btn btn-warn btn-sm" onclick="openSuspendModal('${u.id}')">Suspend</button>`
+          }
+          ${u.verification_proof_url?`<a href="${u.verification_proof_url}" target="_blank" class="btn btn-ghost btn-sm">Proof</a>`:''}
+        </td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    document.getElementById('flaggedTable').innerHTML = html;
   }
 
-  async function approve(id) {
-    if (!confirm('Approve this doctor?')) return;
-    await fetch(`${BASE}/approve/${id}`, { method: 'POST', headers: headers() });
-    document.getElementById('row-' + id)?.remove();
+  // ── All Users ──
+  async function loadAllUsers() {
+    document.getElementById('allTable').innerHTML = '<div class="loading">Loading…</div>';
+    const status = document.getElementById('statusFilter').value;
+    const role   = document.getElementById('roleFilter').value;
+    let url = `/api/admin/all-users?page=${allPage}&limit=${PAGE_SIZE}`;
+    if (status) url += `&status=${status}`;
+    if (role)   url += `&role=${role}`;
+    try {
+      const res = await api(url);
+      allUsers  = res.users || [];
+      allTotal  = res.total || 0;
+      filterAllUsers();
+      renderPagination();
+    } catch(e) {
+      document.getElementById('allTable').innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+    }
   }
 
-  async function reject(id) {
-    const reason = prompt('Reason for rejection (sent to doctor):');
-    if (reason === null) return;
-    await fetch(`${BASE}/reject/${id}`, {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify({ reason }),
-    });
-    document.getElementById('row-' + id)?.remove();
+  function filterAllUsers() {
+    const q = (document.getElementById('userSearch')?.value||'').toLowerCase();
+    const filtered = q ? allUsers.filter(u =>
+      u.full_name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
+    ) : allUsers;
+    renderAllTable(filtered);
   }
 
-  async function loadReports() {
-    const res  = await fetch(`${BASE}/reports`, { headers: headers() });
-    const data = await res.json();
-    const body = document.getElementById('reportsBody');
-    body.innerHTML = '';
-    (data.reports || []).forEach(r => {
-      const date = new Date(r.created_at).toLocaleDateString('en-IN');
-      body.innerHTML += `
-        <tr>
-          <td>${esc(r.reporter?.full_name || '?')}</td>
-          <td><strong>${esc(r.reported?.full_name || '?')}</strong></td>
-          <td>${esc(r.reason)}</td>
-          <td>${date}</td>
-          <td><button class="sm danger"
-            onclick="suspend('${r.reported_user_id}')">Suspend</button></td>
-        </tr>`;
-    });
+  function renderAllTable(users) {
+    if (!users.length) {
+      document.getElementById('allTable').innerHTML = '<div class="empty">No users found</div>';
+      return;
+    }
+    let html = `<table><thead><tr>
+      <th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Vouches</th><th>Reports</th><th>Joined</th><th>Actions</th>
+    </tr></thead><tbody>`;
+    for (const u of users) {
+      const st = u.status||'unknown';
+      html += `<tr>
+        <td><strong>${esc(u.full_name)}</strong></td>
+        <td style="font-size:13px">${esc(u.email)}</td>
+        <td>${ROLE_LABEL[u.role]||u.role||'—'}</td>
+        <td><span class="badge ${STATUS_BADGE[st]||''}">${st.replace('_',' ')}</span></td>
+        <td>${u.vouch_count||0}</td>
+        <td style="${(u.report_count||0)>=3?'color:#ff3b30;font-weight:700':''}">${u.report_count||0}</td>
+        <td style="font-size:12px;color:#6e6e73">${new Date(u.created_at).toLocaleDateString()}</td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap">
+          ${u.is_suspended
+            ? `<button class="btn btn-ghost btn-sm" onclick="unsuspendUser('${u.id}')">Unsuspend</button>`
+            : `<button class="btn btn-warn btn-sm" onclick="openSuspendModal('${u.id}')">Suspend</button>`
+          }
+          ${!u.is_verified && st==='proof_submitted'
+            ? `<button class="btn btn-success btn-sm" onclick="verifyUser('${u.id}')">Verify</button>`
+            : ''
+          }
+        </td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    document.getElementById('allTable').innerHTML = html;
   }
 
-  async function suspend(id) {
-    if (!confirm('Suspend this user?')) return;
-    await fetch(`${BASE}/suspend/${id}`, { method: 'POST', headers: headers() });
-    alert('User suspended.');
-    loadReports();
+  function renderPagination() {
+    const totalPages = Math.ceil(allTotal / PAGE_SIZE);
+    let html = `<span style="font-size:13px;color:#6e6e73">${allTotal} total</span>`;
+    for (let i = 1; i <= Math.min(totalPages, 20); i++) {
+      html += `<button class="${i===allPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
+    }
+    document.getElementById('allPagination').innerHTML = html;
   }
 
+  function goPage(p) { allPage = p; loadAllUsers(); }
+
+  // ── Stats ──
   async function loadStats() {
-    const res  = await fetch(`${BASE}/stats`, { headers: headers() });
-    const data = await res.json();
-    const grid = document.getElementById('statsGrid');
-    grid.innerHTML = `
-      <div class="stat-card"><div class="num">${data.totalStudents || 0}</div>
-        <div class="lbl">Total Students</div></div>
-      <div class="stat-card"><div class="num">${data.totalDoctors || 0}</div>
-        <div class="lbl">Total Doctors</div></div>
-      <div class="stat-card"><div class="num">${data.pendingVerification || 0}</div>
-        <div class="lbl">Pending Review</div></div>
-      <div class="stat-card"><div class="num">${data.activeProSubscribers || 0}</div>
-        <div class="lbl">Pro Subscribers</div></div>
-    `;
-    document.getElementById('headerStats').textContent =
-      `${data.totalStudents + data.totalDoctors} total users`;
+    document.getElementById('statsGrid').innerHTML = '<div class="loading">Loading…</div>';
+    try {
+      const s = await api('/api/admin/stats');
+      const cards = [
+        { val: s.mbbsStudents||0, lbl: 'MBBS Students' },
+        { val: s.bdsStudents||0,  lbl: 'BDS Students' },
+        { val: s.bamsStudents||0, lbl: 'BAMS Students' },
+        { val: s.doctors||0,      lbl: 'Doctors' },
+        { val: s.pendingVerification||0, lbl: 'Pending Review' },
+        { val: s.activeProSubscribers||0, lbl: 'Pro Subscribers' },
+        { val: s.flaggedUsers||0, lbl: 'Flagged Users' },
+      ];
+      document.getElementById('statsGrid').innerHTML = cards.map(c =>
+        `<div class="stat-card"><div class="val">${c.val}</div><div class="lbl">${c.lbl}</div></div>`
+      ).join('');
+    } catch(e) {
+      document.getElementById('statsGrid').innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+    }
   }
 
-  function esc(str) {
-    return String(str ?? '')
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  // ── Actions ──
+  async function verifyUser(id) {
+    if (!confirm('Verify this user?')) return;
+    try {
+      await post('/api/admin/verify-user', { userId: id });
+      alert('User verified! Email sent.');
+      loadTab(activeTab());
+    } catch(e) { alert('Error: ' + e.message); }
   }
+
+  function openRejectModal(id) {
+    _pendingUserId = id;
+    document.getElementById('rejectReason').value = '';
+    document.getElementById('rejectModal').classList.add('show');
+  }
+
+  async function confirmReject() {
+    const reason = document.getElementById('rejectReason').value.trim();
+    if (!reason) { alert('Please enter a reason'); return; }
+    try {
+      await post('/api/admin/reject-user', { userId: _pendingUserId, reason });
+      closeModal('rejectModal');
+      alert('User rejected. Email sent.');
+      loadTab(activeTab());
+    } catch(e) { alert('Error: ' + e.message); }
+  }
+
+  function openSuspendModal(id) {
+    _pendingUserId = id;
+    document.getElementById('suspendReason').value = '';
+    document.getElementById('suspendModal').classList.add('show');
+  }
+
+  async function confirmSuspend() {
+    const reason = document.getElementById('suspendReason').value.trim();
+    try {
+      await post('/api/admin/suspend-user', { userId: _pendingUserId, reason });
+      closeModal('suspendModal');
+      alert('User suspended. Email sent.');
+      loadTab(activeTab());
+    } catch(e) { alert('Error: ' + e.message); }
+  }
+
+  async function unsuspendUser(id) {
+    if (!confirm('Unsuspend this user?')) return;
+    try {
+      await post('/api/admin/unsuspend-user', { userId: id });
+      alert('User unsuspended.');
+      loadTab(activeTab());
+    } catch(e) { alert('Error: ' + e.message); }
+  }
+
+  function closeModal(id) {
+    document.getElementById(id).classList.remove('show');
+  }
+
+  function activeTab() {
+    const tabs = ['pending','flagged','all','stats'];
+    const els  = document.querySelectorAll('.tab');
+    for (let i = 0; i < els.length; i++) {
+      if (els[i].classList.contains('active')) return tabs[i];
+    }
+    return 'pending';
+  }
+
+  function esc(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // Close modals on backdrop click
+  document.querySelectorAll('.modal-bg').forEach(bg => {
+    bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('show'); });
+  });
 </script>
 </body>
 </html>

@@ -1,29 +1,40 @@
-const express = require('express');
-const router  = express.Router();
-const crypto  = require('crypto');
+const express  = require('express');
+const router   = express.Router();
+const crypto   = require('crypto');
+const multer   = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const { createClient } = require('@supabase/supabase-js');
 const { supabaseAdmin } = require('../services/supabase');
-const { sendOTP, sendWelcomeDoctor } = require('../services/resend');
+const {
+  sendOTP,
+  sendWelcomeDoctor,
+  sendProofSubmittedNotification,
+} = require('../services/resend');
 const auth = require('../middleware/auth');
 
 console.log('RESEND KEY CHECK:', process.env.RESEND_API_KEY ? 'LOADED' : 'MISSING');
 
-// Temporary OTP store: email → { otp, expiresAt, name, role }
+// Temporary OTP store: email → { otp, expiresAt, name, userType, ...regFields }
 const otpStore = new Map();
 
 // ─── POST /api/auth/send-otp ─────────────────────────────────────────────────
 router.post('/send-otp', async (req, res, next) => {
   try {
-    const { email, name, role } = req.body;
-    if (!email || !name) return res.status(400).json({ error: 'email and name required' });
+    const {
+      email, name, userType,
+      // student fields
+      collegeName, collegeCity, collegeState, university, yearOfStudy,
+      // doctor fields
+      specialty, nmcNumber, yearsExperience,
+    } = req.body;
 
-    // Validate college email for students
-    if (role === 'student') {
-      const lower = email.toLowerCase();
-      const valid = lower.endsWith('.ac.in') || lower.endsWith('.edu') ||
-                    lower.includes('.edu.');
-      if (!valid) return res.status(400).json({ error: 'Must use a college email (.ac.in or .edu)' });
+    if (!email || !name) return res.status(400).json({ error: 'email and name required' });
+    if (!userType) return res.status(400).json({ error: 'userType required' });
+
+    // Accept any valid email format — no college email restriction
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email address' });
     }
 
     // Check not already registered
@@ -38,7 +49,15 @@ router.post('/send-otp', async (req, res, next) => {
     otpStore.set(email.toLowerCase(), {
       otp,
       name,
-      role,
+      userType,
+      collegeName,
+      collegeCity,
+      collegeState,
+      university,
+      yearOfStudy,
+      specialty,
+      nmcNumber,
+      yearsExperience,
       expiresAt: Date.now() + 15 * 60 * 1000, // 15 min
     });
 
@@ -72,30 +91,47 @@ router.post('/verify-otp', async (req, res, next) => {
     });
     if (authError) throw authError;
 
-    // Insert minimal profile row into public.users
+    // Build user row
+    const userRow = {
+      id: authData.user.id,
+      email: lower,
+      full_name: entry.name,
+      role: entry.userType,
+      status: 'pending_verification',
+      is_verified: false,
+    };
+
+    // Student-specific fields
+    if (entry.userType !== 'doctor') {
+      if (entry.collegeName)  userRow.college_name  = entry.collegeName;
+      if (entry.collegeCity)  userRow.college_city  = entry.collegeCity;
+      if (entry.collegeState) userRow.college_state = entry.collegeState;
+      if (entry.university)   userRow.university    = entry.university;
+      if (entry.yearOfStudy)  userRow.year_of_study = entry.yearOfStudy;
+    }
+
+    // Doctor-specific fields
+    if (entry.userType === 'doctor') {
+      if (entry.specialty)       userRow.specialty         = entry.specialty;
+      if (entry.nmcNumber)       userRow.mrn               = entry.nmcNumber;
+      if (entry.yearsExperience) userRow.years_experience  = parseInt(entry.yearsExperience) || null;
+    }
+
+    // Insert profile row
     const { data: profileData, error: insertError } = await supabaseAdmin
       .from('users')
-      .insert({
-        id: authData.user.id,
-        email: lower,
-        full_name: entry.name,
-        role: entry.role,
-        status: entry.role === 'student' ? 'verified_student' : 'pending_verification',
-      })
+      .insert(userRow)
       .select()
       .single();
+
     if (insertError) {
       console.error('Supabase insert error:', JSON.stringify(insertError));
-      console.error('Error code:', insertError.code);
-      console.error('Error message:', insertError.message);
-      console.error('Error details:', insertError.details);
-      // Clean up the auth user so the email isn't permanently stuck
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       throw insertError;
     }
     console.log('Profile created:', profileData?.id);
 
-    // Sign in server-side to get a real JWT session — avoids client signInWithPassword
+    // Sign in server-side to return a real JWT
     const anonClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
     const { data: signInData, error: signInError } = await anonClient.auth.signInWithPassword({
       email: lower,
@@ -103,15 +139,14 @@ router.post('/verify-otp', async (req, res, next) => {
     });
     if (signInError) {
       console.error('Server-side sign-in failed:', signInError.message);
-      // Fall back: return tempPassword so client can try itself
       return res.json({ ok: true, isNewUser: true, tempPassword });
     }
 
     res.json({
       ok: true,
       isNewUser: true,
-      userId:      authData.user.id,
-      accessToken: signInData.session.access_token,
+      userId:       authData.user.id,
+      accessToken:  signInData.session.access_token,
       refreshToken: signInData.session.refresh_token,
     });
   } catch (err) {
@@ -134,7 +169,114 @@ router.post('/verify-otp', async (req, res, next) => {
   }
 });
 
-// ─── POST /api/auth/register-doctor ──────────────────────────────────────────
+// ─── POST /api/auth/upload-proof ─────────────────────────────────────────────
+const PROOF_ALLOWED_MIME = new Set([
+  'image/jpeg', 'image/jpg', 'image/png', 'application/pdf',
+]);
+
+const _proofUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (_, file, cb) => {
+    if (!PROOF_ALLOWED_MIME.has(file.mimetype)) {
+      return cb(new Error('Only JPG, PNG or PDF files are allowed'));
+    }
+    cb(null, true);
+  },
+});
+
+function parseProofUpload(field) {
+  const middleware = _proofUpload.single(field);
+  return (req, res, next) => {
+    middleware(req, res, (err) => {
+      if (!err) return next();
+      return res.status(400).json({ error: err.message });
+    });
+  };
+}
+
+router.post(
+  '/upload-proof',
+  auth,
+  parseProofUpload('file'),
+  async (req, res, next) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'No file received' });
+
+      const ext = req.file.mimetype === 'application/pdf' ? 'pdf'
+        : req.file.mimetype.split('/')[1].replace('jpeg', 'jpg');
+      const storagePath = `proofs/${req.user.id}/${Date.now()}-proof.${ext}`;
+
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from('verification-proofs')
+        .upload(storagePath, req.file.buffer, {
+          contentType: req.file.mimetype,
+          upsert: false,
+        });
+      if (uploadError) throw uploadError;
+
+      // Build a signed URL (private bucket — 1 year expiry for admin review)
+      const { data: signedData, error: signedError } = await supabaseAdmin.storage
+        .from('verification-proofs')
+        .createSignedUrl(storagePath, 60 * 60 * 24 * 365);
+      if (signedError) throw signedError;
+
+      const proofUrl = signedData.signedUrl;
+
+      // Update user row
+      await supabaseAdmin
+        .from('users')
+        .update({
+          verification_proof_url: proofUrl,
+          status: 'proof_submitted',
+          proof_submitted_at: new Date().toISOString(),
+        })
+        .eq('id', req.user.id);
+
+      // Fetch user details for admin notification
+      const { data: user } = await supabaseAdmin
+        .from('users')
+        .select('full_name, email, role, college_name, year_of_study, specialty')
+        .eq('id', req.user.id)
+        .single();
+
+      // Notify admin
+      await sendProofSubmittedNotification(
+        process.env.ADMIN_EMAIL || 'aryandevagarwal89000@gmail.com',
+        { ...user, proofUrl }
+      ).catch(e => console.error('[resend] admin notify failed:', e.message));
+
+      res.json({ ok: true, proofUrl });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ─── POST /api/auth/allied-health-waitlist ────────────────────────────────────
+router.post('/allied-health-waitlist', async (req, res, next) => {
+  try {
+    const { email, profession } = req.body;
+    if (!email || !profession) {
+      return res.status(400).json({ error: 'email and profession required' });
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email address' });
+    }
+
+    const { error } = await supabaseAdmin
+      .from('allied_health_waitlist')
+      .insert({ email: email.toLowerCase(), profession });
+    if (error && error.code !== '23505') throw error; // ignore duplicate
+
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/auth/register-doctor (legacy — kept for backward compat) ────────
 router.post('/register-doctor', async (req, res, next) => {
   try {
     const { email, fullName, mrn, specialty, hospital, yearsExperience, idPhotoUrl } = req.body;
@@ -160,7 +302,6 @@ router.post('/register-doctor', async (req, res, next) => {
     });
     if (authError) throw authError;
 
-    // Insert minimal profile row into public.users
     const { error: insertError } = await supabaseAdmin
       .from('users')
       .insert({
@@ -169,26 +310,20 @@ router.post('/register-doctor', async (req, res, next) => {
         full_name: fullName,
         role: 'doctor',
         status: 'pending_verification',
+        is_verified: false,
       })
       .select()
       .single();
+
     if (insertError) {
-      console.error('Supabase insert error (doctor):', JSON.stringify(insertError));
-      console.error('Error code:', insertError.code);
-      console.error('Error message:', insertError.message);
-      console.error('Error details:', insertError.details);
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       throw insertError;
     }
 
-    // Update with doctor-specific fields now that the row exists
-    const { error: updateError } = await supabaseAdmin
+    await supabaseAdmin
       .from('users')
       .update({ mrn, specialty, hospital, years_experience: yearsExperience, id_photo_url: idPhotoUrl, handle })
       .eq('id', authData.user.id);
-    if (updateError) {
-      console.error('Supabase update error (doctor fields):', JSON.stringify(updateError));
-    }
 
     res.json({ ok: true });
   } catch (err) {
