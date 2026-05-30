@@ -252,7 +252,7 @@ async function createSession(io, socketId1, socketId2, data1, data2) {
 
   // FCM push — fire-and-forget, non-blocking
   supabaseAdmin.from('users')
-    .select('full_name, fcm_token')
+    .select('id, full_name, fcm_token')
     .in('id', [data1.userId, data2.userId])
     .then(({ data: users }) => {
       if (!users) return;
