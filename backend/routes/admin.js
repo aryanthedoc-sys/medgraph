@@ -22,7 +22,7 @@ router.get('/pending-verifications', requireAdmin, async (req, res, next) => {
     const { data, error } = await supabaseAdmin
       .from('users')
       .select('id, full_name, email, role, college_name, year_of_study, specialty, verification_proof_url, created_at, report_count')
-      .eq('status', 'proof_submitted')
+      .in('status', ['pending_verification', 'proof_submitted'])
       .order('created_at', { ascending: true });
     if (error) throw error;
     res.json({ users: data });
