@@ -9,8 +9,9 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/services/socket_service.dart';
 
-/// Web video call screen — embeds Jitsi Meet in a full-screen IFrame.
-/// Browser handles all WebRTC natively, bypassing dart_webrtc entirely.
+/// Web video call screen.
+/// Iframes into /jitsi_meet.html (same origin) which uses the Jitsi External
+/// API — this lets us pass configOverwrite to disable the lobby gate entirely.
 class VideoCallScreen extends StatefulWidget {
   const VideoCallScreen({
     super.key,
@@ -31,13 +32,22 @@ class VideoCallScreen extends StatefulWidget {
 
 class _VideoCallScreenState extends State<VideoCallScreen> {
   bool _ready = false;
+  html.EventListener? _msgListener;
 
   String get _viewId => 'jitsi-${widget.roomId}';
+
+  String get _iframeSrc {
+    final name = Uri.encodeComponent(widget.partnerName.isNotEmpty
+        ? widget.partnerName
+        : 'MedGraph User');
+    return '/jitsi_meet.html?room=${widget.roomId}&name=$name';
+  }
 
   @override
   void initState() {
     super.initState();
     _registerIframe();
+    _listenHangup();
     SocketService.on('partner-ended', (_) {
       if (mounted) _leave();
     });
@@ -45,6 +55,9 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
 
   @override
   void dispose() {
+    if (_msgListener != null) {
+      html.window.removeEventListener('message', _msgListener!);
+    }
     SocketService.off('partner-ended');
     super.dispose();
   }
@@ -53,16 +66,30 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     try {
       ui.platformViewRegistry.registerViewFactory(_viewId, (int _) {
         return html.IFrameElement()
-          ..src = 'https://meet.jit.si/${widget.roomId}'
+          ..src = _iframeSrc
           ..style.border = 'none'
           ..style.width = '100%'
           ..style.height = '100%'
           ..allow = 'camera; microphone; fullscreen; display-capture; autoplay';
       });
     } catch (_) {
-      // Factory already registered (hot-restart / re-navigation) — safe to ignore.
+      // Already registered on hot-restart / re-navigation.
     }
     if (mounted) setState(() => _ready = true);
+  }
+
+  /// Listen for the 'jitsi-hangup' postMessage sent by jitsi_meet.html
+  /// when the user presses the hang-up button inside Jitsi.
+  void _listenHangup() {
+    _msgListener = (html.Event event) {
+      if (event is html.MessageEvent) {
+        final data = event.data;
+        if (data is Map && data['type'] == 'jitsi-hangup') {
+          _leave();
+        }
+      }
+    };
+    html.window.addEventListener('message', _msgListener!);
   }
 
   void _leave() {
@@ -98,7 +125,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
             top: 0, left: 0, right: 0,
             child: SafeArea(
               child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
@@ -158,11 +185,9 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      child: const Text(
-                        'Leave',
-                        style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
+                      child: const Text('Leave',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w600)),
                     ),
                   ],
                 ),
