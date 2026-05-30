@@ -19,7 +19,7 @@ router.get('/', async (req, res, next) => {
     let query = supabaseAdmin
       .from('users')
       .select('id, full_name, avatar_url, college, current_streak, sessions_this_month, topics_this_month')
-      .eq('status', 'verified_student')
+      .eq('status', 'verified')
       .limit(20);
 
     if (type === 'streak')   query = query.order('current_streak', { ascending: false });
