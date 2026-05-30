@@ -60,11 +60,17 @@ function initSocket(io) {
       try {
         const { data: user, error } = await supabaseAdmin
           .from('users')
-          .select('is_verified, is_suspended, role, pro_filter_match_bds, pro_filter_same_college, pro_filter_same_city, pro_filter_same_state, college_name, city, state')
+          .select('*')
           .eq('id', userId)
           .single();
 
-        if (error || !user) {
+        if (error) {
+          console.error('queue join DB error:', error.message, error.details);
+          socket.emit('queue-error', { message: 'Server error. Please try again.' });
+          return;
+        }
+        if (!user) {
+          console.warn('queue join: userId not found in users table:', userId);
           socket.emit('queue-error', { message: 'User not found.' });
           return;
         }
