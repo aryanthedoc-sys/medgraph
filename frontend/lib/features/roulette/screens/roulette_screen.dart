@@ -132,9 +132,13 @@ class _RouletteScreenState extends ConsumerState<RouletteScreen>
     SocketService.connect(onConnected: () {
       _setupSocketListeners(); // socket exists now — safe to register
       SocketService.emit('join-queue', {
-        'userId': userId,
-        'mode': _mode,
-        'filters': {},
+        'userId':   userId,
+        'mode':     _mode,
+        'filters':  {},
+        'name':     user?.fullName    ?? '',
+        'role':     user?.role        ?? '',
+        'college':  user?.collegeName ?? '',
+        'avatar':   user?.avatarUrl   ?? '',
       });
     });
   }

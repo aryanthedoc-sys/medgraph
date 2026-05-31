@@ -44,9 +44,11 @@ function initSocket(io) {
     console.log(`[socket] connected: ${socket.id}`);
 
     socket.on('join-queue', async (data) => {
-      const { userId, mode = 'study' } = data || {};
+      const { userId, mode = 'study', name: payloadName, role: payloadRole,
+              college: payloadCollege, avatar: payloadAvatar } = data || {};
 
-      console.log(`[queue] JOIN userId=${userId} mode=${mode} socket=${socket.id}`);
+      console.log(`[queue] JOIN userId=${userId} mode=${mode} socket=${socket.id}`,
+        { payloadName, payloadRole, payloadCollege });
 
       if (!userId || typeof userId !== 'string' || userId.trim() === '') {
         console.warn('[queue] REJECTED: empty userId');
@@ -54,38 +56,46 @@ function initSocket(io) {
         return;
       }
 
-      // Verify user exists and is allowed to match
-      let user;
+      // Use payload data as defaults — DB enriches if available but never blocks
+      let userName    = payloadName    || 'User';
+      let userRole    = payloadRole    || 'student_mbbs';
+      let userCollege = payloadCollege || '';
+      let userAvatar  = payloadAvatar  || '';
+
       try {
+        console.log(`[queue] Looking up userId in DB: ${userId}`);
         const { data: row, error } = await supabaseAdmin
           .from('users')
-          .select('id, full_name, role, college_name, city, state, is_verified, is_suspended')
+          .select('full_name, role, college_name, city, state, is_verified, is_suspended, avatar_url')
           .eq('id', userId)
           .single();
 
         if (error || !row) {
-          console.error('[queue] DB lookup failed:', error?.message, 'userId:', userId);
-          socket.emit('queue-error', { message: 'User not found.' });
-          return;
+          console.warn(`[queue] DB lookup failed for ${userId}:`, error?.message,
+            '— proceeding with payload data');
+        } else {
+          console.log(`[queue] DB found: name=${row.full_name} role=${row.role} verified=${row.is_verified}`);
+
+          if (row.is_suspended) {
+            socket.emit('queue-error', { message: 'Your account has been suspended.' });
+            return;
+          }
+          if (!row.is_verified) {
+            socket.emit('queue-error', {
+              message: 'Complete verification to use live matching',
+              code: 'UNVERIFIED',
+            });
+            return;
+          }
+
+          // Enrich with DB values
+          userName    = row.full_name    || userName;
+          userRole    = row.role         || userRole;
+          userCollege = row.college_name || userCollege;
+          userAvatar  = row.avatar_url   || userAvatar;
         }
-        user = row;
       } catch (e) {
-        console.error('[queue] DB error:', e.message);
-        socket.emit('queue-error', { message: 'Server error. Please try again.' });
-        return;
-      }
-
-      if (user.is_suspended) {
-        socket.emit('queue-error', { message: 'Your account has been suspended.' });
-        return;
-      }
-
-      if (!user.is_verified) {
-        socket.emit('queue-error', {
-          message: 'Complete verification to use live matching',
-          code: 'UNVERIFIED',
-        });
-        return;
+        console.warn(`[queue] DB error for ${userId}:`, e.message, '— proceeding with payload data');
       }
 
       // Remove any stale entries for this user/socket before adding
@@ -96,11 +106,10 @@ function initSocket(io) {
         socketId: socket.id,
         mode,
         joinedAt: Date.now(),
-        name:    user.full_name    || 'User',
-        role:    user.role         || '',
-        college: user.college_name || '',
-        city:    user.city         || '',
-        state:   user.state        || '',
+        name:    userName,
+        role:    userRole,
+        college: userCollege,
+        avatar:  userAvatar,
       };
 
       getQueue(mode).push(entry);
