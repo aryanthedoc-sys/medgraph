@@ -113,6 +113,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     }
 
     try {
+      // ignore: avoid_print
+      print('[VideoCallScreen] calling room.connect url=${widget.livekitUrl}');
       await _room.connect(
         widget.livekitUrl,
         widget.token,
@@ -122,28 +124,45 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
           defaultVideoPublishOptions: lk.VideoPublishOptions(simulcast: true),
         ),
       );
-
-      await _room.localParticipant?.setCameraEnabled(true);
-      await _room.localParticipant?.setMicrophoneEnabled(true);
-
-      if (mounted) setState(() { _connecting = false; _connected = true; _showDisclaimer = true; });
-    } catch (_) {
+      // ignore: avoid_print
+      print('[VideoCallScreen] room.connect succeeded');
+    } catch (e) {
+      // ignore: avoid_print
+      print('[VideoCallScreen] room.connect FAILED: $e');
       if (mounted) {
         setState(() {
           _connecting   = false;
-          _connectError = 'Could not join the call. Please try again.';
+          _connectError = 'Could not connect to call: ${e.toString()}';
         });
       }
+      return;
     }
+
+    try {
+      await _room.localParticipant?.setCameraEnabled(true);
+      await _room.localParticipant?.setMicrophoneEnabled(true);
+    } catch (e) {
+      // ignore: avoid_print
+      print('[VideoCallScreen] camera/mic enable failed (non-fatal): $e');
+      // Continue — the call can proceed without camera/mic initially
+    }
+
+    if (mounted) setState(() { _connecting = false; _connected = true; _showDisclaimer = true; });
   }
 
   void _onRoomUpdate() {
     if (!mounted) return;
-    setState(() {});
     if (_connected && !_ending &&
         _room.connectionState == lk.ConnectionState.disconnected) {
-      Navigator.of(context).pop();
+      // ignore: avoid_print
+      print('[VideoCallScreen] unexpected disconnect — showing error UI, NOT popping');
+      setState(() {
+        _connecting = false;
+        _connectError = 'The call was disconnected. Please go back and try again.';
+      });
+      return;
     }
+    setState(() {});
   }
 
   // ── Track accessors ──────────────────────────────────────────────────────────
@@ -351,10 +370,27 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: () {
+                    setState(() {
+                      _connectError = null;
+                      _connecting   = true;
+                      _connected    = false;
+                    });
+                    _connectToRoom();
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.teal,
+                    minimumSize: const Size(160, 44),
+                  ),
+                  child: const Text('Try Again',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+                const SizedBox(height: 8),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text('Go back',
-                      style: TextStyle(color: Colors.white)),
+                      style: TextStyle(color: Colors.white54)),
                 ),
               ],
             ),
@@ -725,7 +761,7 @@ class _NotesSheetState extends State<_NotesSheet> {
 
   Future<void> _skip() async {
     await ApiService.post(
-      '/api/sessions/${widget.roomName}/end',
+      '/api/sessions/${widget.roomId}/end',
       {'durationSeconds': widget.durationSeconds},
     ).catchError((_) => <String, dynamic>{});
     if (mounted) Navigator.pop(context);
@@ -735,7 +771,7 @@ class _NotesSheetState extends State<_NotesSheet> {
     setState(() => _saving = true);
     final notes = _ctrl.text.trim();
     await ApiService.post(
-      '/api/sessions/${widget.roomName}/end',
+      '/api/sessions/${widget.roomId}/end',
       {
         'durationSeconds': widget.durationSeconds,
         if (notes.isNotEmpty) 'summaryNotes': notes,
@@ -783,7 +819,7 @@ class _NotesSheetState extends State<_NotesSheet> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'with ${_partnerName}  ·  $_durationLabel',
+                  'with ${widget.partnerName}  ·  $_durationLabel',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white54, fontSize: 13),

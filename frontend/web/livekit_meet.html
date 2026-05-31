@@ -166,7 +166,7 @@ function hangup() {
   const { Room, RoomEvent, Track } = LivekitClient;
   const room = new Room({ adaptiveStream: true, dynacast: true });
 
-  let micOn = true, camOn = true;
+  let micOn = true, camOn = true, connected = false;
 
   function attachRemoteVideo(track) {
     const el = track.attach();
@@ -195,11 +195,12 @@ function hangup() {
       $waiting.style.display = 'flex';
     })
     .on(RoomEvent.Disconnected, () => {
-      hangup();
+      if (connected) hangup();
     });
 
   try {
     await room.connect(wsUrl, token);
+    connected = true;
 
     // Handle participants who were already in the room when we joined
     for (const [, participant] of room.remoteParticipants) {
