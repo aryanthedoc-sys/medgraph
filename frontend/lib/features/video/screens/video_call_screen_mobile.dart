@@ -218,7 +218,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   }
 
   Future<void> _flipCamera() async {
-    if (!_connected || !_cameraOn) return;
+    if (kIsWeb || !_connected || !_cameraOn) return;
     HapticFeedback.lightImpact();
     final track = _room.localParticipant?.videoTrackPublications
         .firstOrNull?.track;
@@ -436,6 +436,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                 onEndCall: () => _endCall(),
                 onSkip: _skip,
                 onFlip: () { _flipCamera(); },
+                showFlip: !kIsWeb,
               ),
             ),
           ],
@@ -582,6 +583,7 @@ class _BottomControls extends StatelessWidget {
     required this.onEndCall,
     required this.onSkip,
     required this.onFlip,
+    this.showFlip = true,
   });
 
   final bool micOn;
@@ -591,6 +593,7 @@ class _BottomControls extends StatelessWidget {
   final VoidCallback onEndCall;
   final VoidCallback onSkip;
   final VoidCallback onFlip;
+  final bool showFlip;
 
   @override
   Widget build(BuildContext context) {
@@ -637,8 +640,10 @@ class _BottomControls extends StatelessWidget {
                 child: const Icon(Icons.skip_next, color: Colors.black, size: 26),
               ),
             ),
-            const SizedBox(width: 8),
-            _CtrlBtn(icon: Icons.flip_camera_ios, onTap: onFlip, active: true),
+            if (showFlip) ...[
+              const SizedBox(width: 8),
+              _CtrlBtn(icon: Icons.flip_camera_ios, onTap: onFlip, active: true),
+            ],
           ],
         ),
       ),

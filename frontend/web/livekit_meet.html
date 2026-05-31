@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MedGraph Video</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; width: 100vw; height: 100vh; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+
+    /* Remote video — full screen */
+    #remote {
+      position: absolute; inset: 0;
+      background: #1a1a1a;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #remote video {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%; object-fit: cover;
+    }
+
+    /* Waiting placeholder (shown until partner's video arrives) */
+    #waiting {
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
+    }
+    #waiting-avatar {
+      width: 80px; height: 80px; border-radius: 50%;
+      background: rgba(0,199,190,0.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px; font-weight: 700; color: #00C7BE;
+    }
+    #waiting-name  { color: #fff; font-size: 16px; font-weight: 600; }
+    #waiting-sub   { color: rgba(255,255,255,0.4); font-size: 13px; }
+
+    /* Local PiP */
+    #local {
+      position: absolute; top: 72px; right: 16px;
+      width: 110px; height: 155px; border-radius: 10px; overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.15); background: #2c2c2c; z-index: 10;
+    }
+    #local video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+
+    /* Controls bar */
+    #controls {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 20px 32px 36px;
+      background: linear-gradient(transparent, rgba(0,0,0,0.85));
+      display: flex; justify-content: center; align-items: center; gap: 14px;
+      z-index: 20;
+    }
+    button {
+      border: none; cursor: pointer; border-radius: 50%; outline: none;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform .1s, background .15s;
+    }
+    button:active { transform: scale(.91); }
+    .btn-ctrl { width: 52px; height: 52px; background: rgba(255,255,255,0.15); }
+    .btn-ctrl.off { background: rgba(220,38,38,0.7); }
+    .btn-ctrl svg { width: 22px; height: 22px; fill: #fff; }
+    .btn-end { width: 62px; height: 62px; background: #DC2626; }
+    .btn-end svg { width: 26px; height: 26px; fill: #fff; }
+
+    /* Connecting overlay */
+    #connecting {
+      position: absolute; inset: 0; background: #000;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 16px; z-index: 30;
+    }
+    .spinner {
+      width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: #00C7BE; border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #connecting p { color: rgba(255,255,255,0.6); font-size: 15px; }
+
+    /* Error overlay */
+    #error {
+      position: absolute; inset: 0; background: #000;
+      display: none; flex-direction: column; align-items: center;
+      justify-content: center; gap: 12px; padding: 32px; z-index: 30;
+    }
+    #error p { color: rgba(255,255,255,0.7); font-size: 14px; text-align: center; }
+    #error button { border-radius: 8px; padding: 12px 24px; background: #DC2626; color: #fff; font-size: 14px; font-weight: 600; }
+  </style>
+</head>
+<body>
+
+<div id="connecting">
+  <div class="spinner"></div>
+  <p id="connecting-text">Connecting…</p>
+</div>
+
+<div id="error">
+  <p id="error-msg">Connection failed.</p>
+  <button onclick="hangup()">Leave</button>
+</div>
+
+<div id="remote">
+  <div id="waiting">
+    <div id="waiting-avatar">?</div>
+    <div id="waiting-name"></div>
+    <div id="waiting-sub">Waiting for partner to join…</div>
+  </div>
+</div>
+
+<div id="local"><div id="local-inner"></div></div>
+
+<div id="controls">
+  <!-- Mic -->
+  <button class="btn-ctrl" id="btn-mic" title="Toggle microphone">
+    <svg id="ico-mic" viewBox="0 0 24 24">
+      <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/>
+    </svg>
+    <svg id="ico-mic-off" viewBox="0 0 24 24" style="display:none">
+      <path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.34 3 3 3 .23 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/>
+    </svg>
+  </button>
+
+  <!-- End call -->
+  <button class="btn-end" id="btn-end" title="End call">
+    <svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.73-1.68-1.36-2.66-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
+  </button>
+
+  <!-- Camera -->
+  <button class="btn-ctrl" id="btn-cam" title="Toggle camera">
+    <svg id="ico-cam" viewBox="0 0 24 24">
+      <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+    </svg>
+    <svg id="ico-cam-off" viewBox="0 0 24 24" style="display:none">
+      <path d="M21 6.5l-4-4-9.27 9.28-1.5-1.5L3 13.5V19h5.5l2.5-2.5 1.73 1.73L21 6.5zm-2.41-1L3.41 21.09 2 19.68l15.18-15.18L18.59 5.5z"/>
+    </svg>
+  </button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.5.0/dist/livekit-client.umd.min.js"></script>
+<script>
+// Notify the Flutter parent frame to navigate away.
+function hangup() {
+  window.parent.postMessage({ type: 'livekit-hangup' }, '*');
+}
+
+(async () => {
+  const p       = new URLSearchParams(location.search);
+  const wsUrl   = p.get('url');
+  const token   = p.get('token');
+  const name    = p.get('name') || 'Partner';
+
+  const $connecting = document.getElementById('connecting');
+  const $error      = document.getElementById('error');
+  const $errorMsg   = document.getElementById('error-msg');
+  const $waiting    = document.getElementById('waiting');
+  const $remote     = document.getElementById('remote');
+  const $localInner = document.getElementById('local-inner');
+
+  document.getElementById('waiting-avatar').textContent = name.charAt(0).toUpperCase();
+  document.getElementById('waiting-name').textContent   = name;
+
+  if (!wsUrl || !token) {
+    $connecting.style.display = 'none';
+    $error.style.display = 'flex';
+    $errorMsg.textContent = 'Missing connection parameters.';
+    return;
+  }
+
+  const { Room, RoomEvent, Track } = LivekitClient;
+  const room = new Room({ adaptiveStream: true, dynacast: true });
+
+  let micOn = true, camOn = true;
+
+  function attachRemoteVideo(track) {
+    const el = track.attach();
+    el.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;';
+    $remote.querySelectorAll('video').forEach(v => v.remove());
+    $waiting.style.display = 'none';
+    $remote.appendChild(el);
+  }
+
+  room
+    .on(RoomEvent.TrackSubscribed, (track) => {
+      if (track.kind === Track.Kind.Video) {
+        attachRemoteVideo(track);
+      } else if (track.kind === Track.Kind.Audio) {
+        document.body.appendChild(track.attach());
+      }
+    })
+    .on(RoomEvent.TrackUnsubscribed, (track) => {
+      track.detach();
+      if (track.kind === Track.Kind.Video) {
+        $waiting.style.display = 'flex';
+      }
+    })
+    .on(RoomEvent.ParticipantDisconnected, () => {
+      $remote.querySelectorAll('video').forEach(v => v.remove());
+      $waiting.style.display = 'flex';
+    })
+    .on(RoomEvent.Disconnected, () => {
+      hangup();
+    });
+
+  try {
+    await room.connect(wsUrl, token);
+
+    // Handle participants who were already in the room when we joined
+    for (const [, participant] of room.remoteParticipants) {
+      for (const [, pub] of participant.trackPublications) {
+        if (pub.isSubscribed && pub.track) {
+          if (pub.track.kind === Track.Kind.Video) attachRemoteVideo(pub.track);
+          else if (pub.track.kind === Track.Kind.Audio) document.body.appendChild(pub.track.attach());
+        }
+      }
+    }
+
+    await room.localParticipant.enableCameraAndMicrophone();
+
+    // Attach local camera to PiP
+    for (const [, pub] of room.localParticipant.trackPublications) {
+      if (pub.track && pub.source === Track.Source.Camera) {
+        const el = pub.track.attach();
+        el.style.cssText = 'width:100%;height:100%;object-fit:cover;transform:scaleX(-1);';
+        $localInner.innerHTML = '';
+        $localInner.appendChild(el);
+        break;
+      }
+    }
+
+    $connecting.style.display = 'none';
+
+  } catch (e) {
+    console.error('LiveKit connect error:', e);
+    $connecting.style.display = 'none';
+    $error.style.display = 'flex';
+    $errorMsg.textContent = String(e);
+  }
+
+  document.getElementById('btn-mic').onclick = async () => {
+    micOn = !micOn;
+    await room.localParticipant.setMicrophoneEnabled(micOn);
+    document.getElementById('ico-mic').style.display     = micOn ? '' : 'none';
+    document.getElementById('ico-mic-off').style.display = micOn ? 'none' : '';
+    document.getElementById('btn-mic').classList.toggle('off', !micOn);
+  };
+
+  document.getElementById('btn-cam').onclick = async () => {
+    camOn = !camOn;
+    await room.localParticipant.setCameraEnabled(camOn);
+    document.getElementById('ico-cam').style.display     = camOn ? '' : 'none';
+    document.getElementById('ico-cam-off').style.display = camOn ? 'none' : '';
+    document.getElementById('btn-cam').classList.toggle('off', !camOn);
+  };
+
+  document.getElementById('btn-end').onclick = () => {
+    room.disconnect();
+  };
+})();
+</script>
+</body>
+</html>
