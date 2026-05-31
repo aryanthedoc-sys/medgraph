@@ -381,4 +381,32 @@ router.get('/me', auth, async (req, res, next) => {
   }
 });
 
+// ─── GET /api/auth/pro-status ─────────────────────────────────────────────────
+router.get('/pro-status', auth, async (req, res, next) => {
+  try {
+    const { data: profile } = await supabaseAdmin
+      .from('users')
+      .select('is_pro, pro_expires_at')
+      .eq('id', req.user.id)
+      .single();
+
+    const isPro        = !!profile?.is_pro;
+    const expiresAt    = profile?.pro_expires_at ? new Date(profile.pro_expires_at) : null;
+    const now          = new Date();
+    const isExpired    = expiresAt ? expiresAt <= now : true;
+    const daysRemaining = expiresAt && !isExpired
+      ? Math.ceil((expiresAt - now) / (1000 * 60 * 60 * 24))
+      : 0;
+
+    res.json({
+      isPro: isPro && !isExpired,
+      expiresAt: expiresAt?.toISOString() ?? null,
+      daysRemaining,
+      isExpired,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;
