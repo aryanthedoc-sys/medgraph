@@ -169,7 +169,7 @@ class UserModel {
     followerCount:     j['follower_count'] as int? ?? 0,
     followingCount:    j['following_count'] as int? ?? 0,
     postCount:         j['post_count'] as int? ?? 0,
-    currentStreak:     j['current_streak'] as int? ?? 0,
+    currentStreak:     (j['current_streak'] as int?) ?? (j['streak_count'] as int?) ?? 0,
     longestStreak:     j['longest_streak'] as int? ?? 0,
     sessionsThisMonth: j['sessions_this_month'] as int? ?? 0,
     subscriptionPrice: j['subscription_price'] as int?,

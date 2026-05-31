@@ -25,6 +25,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   bool _isFollowing = false;
   bool _followLoading = false;
   bool _avatarLoading = false;
+  bool _hasVouched = false;
+  bool _isBlocked  = false;
   int _tab = 0;
 
   bool get _isOwnProfile => widget.userId == null;
@@ -162,8 +164,56 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
+  Future<void> _vouch() async {
+    if (_user == null) return;
+    try {
+      final data = await ApiService.post('/api/profiles/${_user!.id}/vouch', {});
+      final newCount = data['vouch_count'] as int? ?? _user!.vouchCount + 1;
+      setState(() {
+        _hasVouched = true;
+        _user = _user!.copyWith(vouchCount: newCount);
+      });
+      _showSnack('You vouched for ${_user!.fullName} ✓');
+    } on ApiException catch (e) {
+      _showSnack(e.statusCode == 409 ? 'Already vouched' : e.message);
+    } catch (_) {
+      _showSnack('Could not vouch. Please try again.');
+    }
+  }
+
+  Future<void> _block() async {
+    if (_user == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('Block ${_user!.fullName}?'),
+        content: const Text(
+          'They won\'t be able to see your profile, match with you, or message you.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Block', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ApiService.post('/api/profiles/${_user!.id}/block', {});
+      setState(() => _isBlocked = true);
+      _showSnack('${_user!.fullName} blocked');
+    } catch (_) {
+      _showSnack('Could not block. Please try again.');
+    }
+  }
+
   void _showMoreSheet() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark      = Theme.of(context).brightness == Brightness.dark;
+    final currentUser = ref.read(currentUserProvider);
+    final canVouch    = currentUser?.isVerified == true && !_hasVouched;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -176,19 +226,55 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.flag_outlined, color: AppColors.danger),
-              title: const Text('Report this profile',
-                  style: TextStyle(color: AppColors.danger)),
-              onTap: () {
-                Navigator.pop(context);
-                _showSnack('Report submitted.');
-              },
-            ),
+            if (canVouch)
+              ListTile(
+                leading: const Icon(Icons.verified_user_outlined, color: AppColors.teal),
+                title: Text('Vouch for ${_user?.fullName ?? 'this user'}',
+                    style: const TextStyle(fontWeight: FontWeight.w500)),
+                subtitle: const Text('Confirm you know this person is a real med student/doctor'),
+                onTap: () { Navigator.pop(context); _vouch(); },
+              ),
+            if (_hasVouched)
+              ListTile(
+                leading: const Icon(Icons.check_circle_outline, color: AppColors.teal),
+                title: const Text('Vouched ✓',
+                    style: TextStyle(color: AppColors.teal, fontWeight: FontWeight.w500)),
+                subtitle: const Text('You have already vouched for this profile'),
+              ),
             ListTile(
               leading: const Icon(Icons.share_outlined),
               title: const Text('Share profile'),
               onTap: () => Navigator.pop(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.flag_outlined, color: AppColors.danger),
+              title: const Text('Report this profile',
+                  style: TextStyle(color: AppColors.danger)),
+              onTap: () { Navigator.pop(context); _showSnack('Report submitted.'); },
+            ),
+            ListTile(
+              leading: Icon(
+                _isBlocked ? Icons.do_not_disturb_off : Icons.block,
+                color: AppColors.danger,
+              ),
+              title: Text(
+                _isBlocked ? 'Unblock ${_user?.fullName ?? 'user'}' : 'Block ${_user?.fullName ?? 'user'}',
+                style: const TextStyle(color: AppColors.danger),
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                if (_isBlocked) {
+                  try {
+                    await ApiService.delete('/api/profiles/${_user!.id}/block');
+                    setState(() => _isBlocked = false);
+                    _showSnack('Unblocked');
+                  } catch (_) {
+                    _showSnack('Could not unblock.');
+                  }
+                } else {
+                  _block();
+                }
+              },
             ),
           ],
         ),

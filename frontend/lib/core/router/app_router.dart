@@ -19,6 +19,7 @@ import '../../features/profile/screens/profile_screen.dart';
 import '../../features/profile/screens/public_profile_screen.dart';
 import '../../features/profile/screens/settings_screen.dart';
 import '../../features/profile/screens/followers_screen.dart';
+import '../../features/profile/screens/blocked_accounts_screen.dart';
 import '../../features/leaderboard/screens/leaderboard_screen.dart';
 import '../../features/search/screens/search_screen.dart';
 import '../../features/payments/screens/upgrade_screen.dart';
@@ -126,7 +127,8 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Full-screen screens (no bottom nav)
       GoRoute(path: '/profile/edit',   builder: (_, __) => const EditProfileScreen()),
-      GoRoute(path: '/settings',       builder: (_, __) => const SettingsScreen()),
+      GoRoute(path: '/settings',         builder: (_, __) => const SettingsScreen()),
+      GoRoute(path: '/settings/blocked', builder: (_, __) => const BlockedAccountsScreen()),
 
       // Other user profiles (full-screen)
       GoRoute(

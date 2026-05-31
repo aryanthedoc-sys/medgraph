@@ -9,10 +9,6 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/models/user_model.dart';
 import '../../../shared/services/api_service.dart';
 
-/// Editable fields differ by role.
-/// Doctors see: specialty, hospital.
-/// Students see: college, academic year.
-/// Both see: full name, bio, city, state, phone, handle.
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
 
@@ -21,26 +17,27 @@ class EditProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
-  // ── Controllers ──────────────────────────────────────────────────────────────
   late final TextEditingController _nameCtrl;
   late final TextEditingController _bioCtrl;
-  late final TextEditingController _cityCtrl;
-  late final TextEditingController _stateCtrl;
   late final TextEditingController _phoneCtrl;
   late final TextEditingController _handleCtrl;
-  late final TextEditingController _collegeCtrl;
+  late final TextEditingController _collegeNameCtrl;
+  late final TextEditingController _universityCtrl;
+  late final TextEditingController _collegeCityCtrl;
   late final TextEditingController _hospitalCtrl;
+  late final TextEditingController _neetTargetCtrl;
 
-  // ── State ─────────────────────────────────────────────────────────────────────
   String? _selectedSpecialty;
-  int? _selectedYear;
+  String? _yearOfStudy;
+  String? _collegeState;
+  List<String> _tags = [];
+  List<String> _languages = [];
   bool _loading = false;
   String? _handleError;
 
-  // ── Avatar pick ───────────────────────────────────────────────────────────────
   Uint8List? _pickedBytes;
-  String     _pickedMime   = 'image/jpeg';
-  bool       _uploadingAvatar = false;
+  String _pickedMime   = 'image/jpeg';
+  bool _uploadingAvatar = false;
 
   static const _specialties = [
     'General Medicine', 'Internal Medicine', 'Surgery',
@@ -48,27 +45,47 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     'Dermatology', 'Orthopaedics', 'Neurology', 'Psychiatry',
     'Radiology', 'Anaesthesia', 'Pathology', 'Ophthalmology',
     'ENT', 'Urology', 'Nephrology', 'Gastroenterology',
-    'Pulmonology', 'Endocrinology',
+    'Pulmonology', 'Endocrinology', 'Oncology', 'Rheumatology',
+    'Other',
   ];
 
-  static const _years = [1, 2, 3, 4, 5];
+  static const _yearOptions = [
+    '1st Year', '2nd Year', '3rd Year', '4th Year', 'Intern',
+  ];
 
-  // ── Lifecycle ─────────────────────────────────────────────────────────────────
+  static const _indianStates = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+    'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+    'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan',
+    'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh',
+    'Uttarakhand', 'West Bengal', 'Delhi', 'Jammu & Kashmir', 'Ladakh',
+    'Chandigarh', 'Puducherry',
+  ];
+
+  static const _allLanguages = [
+    'English', 'Hindi', 'Tamil', 'Telugu', 'Kannada', 'Malayalam',
+    'Bengali', 'Marathi', 'Gujarati', 'Punjabi', 'Urdu',
+  ];
 
   @override
   void initState() {
     super.initState();
     final u = ref.read(currentUserProvider)!;
-    _nameCtrl     = TextEditingController(text: u.fullName);
-    _bioCtrl      = TextEditingController(text: u.bio ?? '');
-    _cityCtrl     = TextEditingController(text: u.city ?? '');
-    _stateCtrl    = TextEditingController(text: u.state ?? '');
-    _phoneCtrl    = TextEditingController(text: u.phone ?? '');
-    _handleCtrl   = TextEditingController(text: u.handle ?? '');
-    _collegeCtrl  = TextEditingController(text: u.college ?? '');
-    _hospitalCtrl = TextEditingController(text: u.hospital ?? '');
+    _nameCtrl       = TextEditingController(text: u.fullName);
+    _bioCtrl        = TextEditingController(text: u.bio ?? '');
+    _phoneCtrl      = TextEditingController(text: u.phone ?? '');
+    _handleCtrl     = TextEditingController(text: u.handle ?? '');
+    _collegeNameCtrl= TextEditingController(text: u.collegeName ?? u.college ?? '');
+    _universityCtrl = TextEditingController(text: u.university ?? '');
+    _collegeCityCtrl= TextEditingController(text: u.collegeCity ?? u.city ?? '');
+    _hospitalCtrl   = TextEditingController(text: u.hospital ?? '');
+    _neetTargetCtrl = TextEditingController();
     _selectedSpecialty = u.specialty;
-    _selectedYear      = u.academicYear;
+    _yearOfStudy    = u.yearOfStudy;
+    _collegeState   = u.collegeState ?? u.state;
+    _tags           = List<String>.from(u.tags);
+    _languages      = List<String>.from(u.languages);
     _bioCtrl.addListener(() => setState(() {}));
     _handleCtrl.addListener(_validateHandle);
   }
@@ -77,89 +94,99 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _bioCtrl.dispose();
-    _cityCtrl.dispose();
-    _stateCtrl.dispose();
     _phoneCtrl.dispose();
     _handleCtrl.dispose();
-    _collegeCtrl.dispose();
+    _collegeNameCtrl.dispose();
+    _universityCtrl.dispose();
+    _collegeCityCtrl.dispose();
     _hospitalCtrl.dispose();
+    _neetTargetCtrl.dispose();
     super.dispose();
   }
 
-  // ── Validation ────────────────────────────────────────────────────────────────
-
   void _validateHandle() {
     final v = _handleCtrl.text;
-    if (v.isEmpty) {
-      setState(() => _handleError = null);
-      return;
-    }
-    final valid = RegExp(r'^[a-z0-9-]{3,40}$').hasMatch(v);
-    setState(() => _handleError = valid
+    if (v.isEmpty) { setState(() => _handleError = null); return; }
+    setState(() => _handleError = RegExp(r'^[a-z0-9-]{3,40}$').hasMatch(v)
         ? null
         : 'Lowercase letters, numbers and hyphens only (3–40 chars)');
   }
 
-  // ── Avatar pick ───────────────────────────────────────────────────────────────
-
   Future<void> _pickAvatar() async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 800,
-      maxHeight: 800,
-      imageQuality: 85,
-    );
+    final picked = await picker.pickImage(source: ImageSource.gallery,
+        maxWidth: 800, maxHeight: 800, imageQuality: 85);
     if (picked == null) return;
-    final bytes    = await picked.readAsBytes();
-    final mimeType = picked.mimeType ?? 'image/jpeg';
-    setState(() {
-      _pickedBytes = bytes;
-      _pickedMime  = mimeType;
+    final bytes = await picked.readAsBytes();
+    setState(() { _pickedBytes = bytes; _pickedMime = picked.mimeType ?? 'image/jpeg'; });
+  }
+
+  void _addTag() {
+    if (_tags.length >= 5) return;
+    showDialog<String>(
+      context: context,
+      builder: (_) {
+        final ctrl = TextEditingController();
+        return AlertDialog(
+          title: const Text('Add tag'),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'e.g. Cardiology, NEET PG'),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    ).then((tag) {
+      if (tag != null && tag.isNotEmpty && !_tags.contains(tag)) {
+        setState(() => _tags.add(tag));
+      }
     });
   }
 
-  // ── Save ──────────────────────────────────────────────────────────────────────
-
   Future<void> _save() async {
-    if (_nameCtrl.text.trim().isEmpty) {
-      _showSnack('Full name cannot be empty.');
-      return;
-    }
+    if (_nameCtrl.text.trim().isEmpty) { _showSnack('Full name cannot be empty.'); return; }
     if (_handleError != null) return;
 
     setState(() => _loading = true);
     try {
       String? newAvatarUrl;
-
-      // Upload avatar first if the user picked a new one
       if (_pickedBytes != null) {
         setState(() => _uploadingAvatar = true);
-        final ext      = _pickedMime.split('/').last;
-        final filename = 'avatar.$ext';
-        final result   = await ApiService.uploadFile(
+        final ext = _pickedMime.split('/').last;
+        final result = await ApiService.uploadFile(
           path: '/api/uploads/avatar',
           fieldName: 'file',
           fileBytes: _pickedBytes!,
-          filename: filename,
+          filename: 'avatar.$ext',
           mimeType: _pickedMime,
         );
         newAvatarUrl = result['avatarUrl'] as String?;
         setState(() => _uploadingAvatar = false);
       }
 
-      // PATCH profile fields
       final user = ref.read(currentUserProvider)!;
       final body = <String, dynamic>{
-        'full_name': _nameCtrl.text.trim(),
-        'bio':       _bioCtrl.text.trim().isEmpty ? null : _bioCtrl.text.trim(),
-        'city':      _cityCtrl.text.trim().isEmpty ? null : _cityCtrl.text.trim(),
-        'state':     _stateCtrl.text.trim().isEmpty ? null : _stateCtrl.text.trim(),
-        'phone':     _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
-        'handle':    _handleCtrl.text.trim().isEmpty ? null : _handleCtrl.text.trim(),
+        'full_name':     _nameCtrl.text.trim(),
+        'bio':           _bioCtrl.text.trim().isEmpty ? null : _bioCtrl.text.trim(),
+        'phone':         _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+        'handle':        _handleCtrl.text.trim().isEmpty ? null : _handleCtrl.text.trim(),
+        'college_name':  _collegeNameCtrl.text.trim().isEmpty ? null : _collegeNameCtrl.text.trim(),
+        'university':    _universityCtrl.text.trim().isEmpty ? null : _universityCtrl.text.trim(),
+        'college_city':  _collegeCityCtrl.text.trim().isEmpty ? null : _collegeCityCtrl.text.trim(),
+        'college_state': _collegeState,
+        'tags':          _tags,
+        'languages':     _languages,
         if (user.isStudent) ...{
-          'college':       _collegeCtrl.text.trim().isEmpty ? null : _collegeCtrl.text.trim(),
-          'academic_year': _selectedYear,
+          'year_of_study': _yearOfStudy,
+          if (_neetTargetCtrl.text.isNotEmpty)
+            'neet_pg_target_year': int.tryParse(_neetTargetCtrl.text),
         },
         if (user.isDoctor) ...{
           'specialty': _selectedSpecialty,
@@ -167,23 +194,18 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         },
       };
 
-      final data   = await ApiService.patch('/api/profiles/me', body);
+      final data    = await ApiService.patch('/api/profiles/me', body);
       final updated = UserModel.fromJson(data['user'] as Map<String, dynamic>);
-
-      // If avatar was uploaded separately, merge the URL into the model.
-      final finalUser = newAvatarUrl != null
-          ? updated.copyWith(avatarUrl: newAvatarUrl)
-          : updated;
-
+      final finalUser = newAvatarUrl != null ? updated.copyWith(avatarUrl: newAvatarUrl) : updated;
       ref.read(currentUserProvider.notifier).setUser(finalUser);
 
-      if (mounted) context.pop();
-    } on ApiException catch (e) {
-      if (e.statusCode == 409) {
-        setState(() => _handleError = 'Handle is already taken');
-      } else {
-        _showSnack('Error: ${e.message}');
+      if (mounted) {
+        _showSnack('Profile updated ✓');
+        context.pop();
       }
+    } on ApiException catch (e) {
+      if (e.statusCode == 409) setState(() => _handleError = 'Handle is already taken');
+      else _showSnack('Error: ${e.message}');
     } catch (_) {
       _showSnack('Something went wrong. Please try again.');
     } finally {
@@ -191,25 +213,45 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     }
   }
 
-  void _showSnack(String msg) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
-  }
-
-  // ── Build ─────────────────────────────────────────────────────────────────────
+  void _showSnack(String msg) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
   @override
   Widget build(BuildContext context) {
     final user    = ref.watch(currentUserProvider)!;
     final isDark  = Theme.of(context).brightness == Brightness.dark;
     final text    = isDark ? Colors.white : Colors.black;
-    final sub     = isDark ? AppColors.darkSecondary  : AppColors.lightSecondary;
-    final surface = isDark ? AppColors.darkSurface    : AppColors.lightSurface;
+    final sub     = isDark ? AppColors.darkSecondary : AppColors.lightSecondary;
+    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
+    final bg      = isDark ? AppColors.darkBackground : AppColors.lightBackground;
 
     return Scaffold(
-      backgroundColor:
-          isDark ? AppColors.darkBackground : AppColors.lightBackground,
-      appBar: _buildAppBar(isDark, text, sub),
+      backgroundColor: bg,
+      appBar: AppBar(
+        backgroundColor: bg,
+        elevation: 0,
+        leading: TextButton(
+          onPressed: _loading ? null : () => context.pop(),
+          child: Text('Cancel', style: AppTextStyles.body.copyWith(
+              color: _loading ? sub : text)),
+        ),
+        leadingWidth: 80,
+        title: Text('Edit Profile', style: AppTextStyles.headline.copyWith(color: text)),
+        centerTitle: true,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: _loading
+                ? const Center(child: SizedBox(width: 20, height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2)))
+                : TextButton(
+                    onPressed: _save,
+                    child: Text('Save', style: AppTextStyles.body.copyWith(
+                        color: AppColors.teal, fontWeight: FontWeight.w600)),
+                  ),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: CustomScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -226,157 +268,234 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     uploading: _uploadingAvatar,
                     onTap: _pickAvatar,
                   ),
+                  const SizedBox(height: 28),
 
-                  const SizedBox(height: 32),
+                  // ── Basic info ──────────────────────────────────────────
+                  _SectionLabel('BASIC INFO', sub),
+                  _Tile(surface: surface, child: Column(children: [
+                    _Field(hint: 'Full name', controller: _nameCtrl,
+                        textCapitalization: TextCapitalization.words,
+                        textInputAction: TextInputAction.next),
+                    _Divider(isDark),
+                    _Field(hint: 'Bio — tell peers who you are',
+                        controller: _bioCtrl, maxLines: 4, maxLength: 300,
+                        textInputAction: TextInputAction.newline),
+                  ])),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 4, 20, 0),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Text('${_bioCtrl.text.length} / 300',
+                          style: AppTextStyles.caption.copyWith(color: sub)),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
 
-                  // ── About ───────────────────────────────────────────────
-                  _SectionLabel('ABOUT', sub),
-                  _Tile(
-                    surface: surface,
-                    child: Column(
+                  // ── Tags ────────────────────────────────────────────────
+                  _SectionLabel('INTERESTS & TAGS', sub),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Wrap(
+                      spacing: 8, runSpacing: 8,
                       children: [
-                        _Field(
-                          hint: 'Full name',
-                          controller: _nameCtrl,
-                          textCapitalization: TextCapitalization.words,
-                          textInputAction: TextInputAction.next,
-                        ),
-                        _Divider(isDark),
-                        _Field(
-                          hint: 'Bio — tell peers who you are',
-                          controller: _bioCtrl,
-                          maxLines: 4,
-                          maxLength: 300,
-                          textInputAction: TextInputAction.newline,
-                        ),
+                        ..._tags.map((tag) => Chip(
+                          label: Text(tag, style: TextStyle(fontSize: 13, color: AppColors.teal)),
+                          backgroundColor: AppColors.teal.withValues(alpha: 0.1),
+                          side: BorderSide(color: AppColors.teal.withValues(alpha: 0.3)),
+                          deleteIconColor: AppColors.teal,
+                          onDeleted: () => setState(() => _tags.remove(tag)),
+                          deleteIcon: const Icon(Icons.close, size: 14),
+                        )),
+                        if (_tags.length < 5)
+                          ActionChip(
+                            label: Text('+ Add tag',
+                                style: AppTextStyles.footnote.copyWith(color: sub)),
+                            backgroundColor: surface,
+                            onPressed: _addTag,
+                          ),
                       ],
                     ),
                   ),
-                  _BioCounter(_bioCtrl.text.length, sub),
-
                   const SizedBox(height: 24),
+
+                  // ── Academic / Professional ──────────────────────────────
+                  if (user.isStudent) ...[
+                    _SectionLabel('ACADEMIC', sub),
+                    _Tile(surface: surface, child: Column(children: [
+                      _Field(hint: 'College name', controller: _collegeNameCtrl,
+                          textCapitalization: TextCapitalization.words,
+                          textInputAction: TextInputAction.next),
+                      _Divider(isDark),
+                      _Field(hint: 'University / Affiliation', controller: _universityCtrl,
+                          textCapitalization: TextCapitalization.words,
+                          textInputAction: TextInputAction.next),
+                    ])),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: DropdownButtonFormField<String>(
+                        value: _yearOfStudy,
+                        decoration: InputDecoration(
+                          labelText: 'Year of study',
+                          labelStyle: AppTextStyles.body.copyWith(color: sub),
+                          filled: true,
+                          fillColor: surface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 14),
+                        ),
+                        items: _yearOptions.map((y) => DropdownMenuItem(
+                          value: y, child: Text(y))).toList(),
+                        onChanged: (v) => setState(() => _yearOfStudy = v),
+                        dropdownColor: surface,
+                        style: AppTextStyles.body.copyWith(color: text),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _Tile(surface: surface, child: _Field(
+                        hint: 'NEET PG target year (optional)',
+                        controller: _neetTargetCtrl,
+                        keyboardType: TextInputType.number,
+                        textInputAction: TextInputAction.next,
+                      )),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  if (user.isDoctor) ...[
+                    _SectionLabel('PROFESSIONAL', sub),
+                    _Tile(surface: surface, child: Column(children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedSpecialty,
+                            hint: Text('Specialty', style: AppTextStyles.body.copyWith(color: sub)),
+                            isExpanded: true,
+                            icon: Icon(Icons.keyboard_arrow_down, color: sub, size: 20),
+                            dropdownColor: surface,
+                            style: AppTextStyles.body.copyWith(color: text),
+                            items: _specialties.map((s) =>
+                                DropdownMenuItem(value: s, child: Text(s))).toList(),
+                            onChanged: (v) => setState(() => _selectedSpecialty = v),
+                          ),
+                        ),
+                      ),
+                      _Divider(isDark),
+                      _Field(hint: 'Hospital / Institution', controller: _hospitalCtrl,
+                          textCapitalization: TextCapitalization.words,
+                          textInputAction: TextInputAction.next),
+                    ])),
+                    const SizedBox(height: 24),
+                  ],
 
                   // ── Location ────────────────────────────────────────────
                   _SectionLabel('LOCATION', sub),
-                  _Tile(
-                    surface: surface,
-                    child: Column(
-                      children: [
-                        _Field(
-                          hint: 'City',
-                          controller: _cityCtrl,
-                          textCapitalization: TextCapitalization.words,
-                          textInputAction: TextInputAction.next,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(children: [
+                      DropdownButtonFormField<String>(
+                        value: _collegeState,
+                        decoration: InputDecoration(
+                          labelText: 'State',
+                          labelStyle: AppTextStyles.body.copyWith(color: sub),
+                          filled: true,
+                          fillColor: surface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 14),
                         ),
-                        _Divider(isDark),
-                        _Field(
-                          hint: 'State',
-                          controller: _stateCtrl,
-                          textCapitalization: TextCapitalization.words,
-                          textInputAction: TextInputAction.next,
-                        ),
-                      ],
+                        items: _indianStates.map((s) => DropdownMenuItem(
+                          value: s, child: Text(s))).toList(),
+                        onChanged: (v) => setState(() => _collegeState = v),
+                        dropdownColor: surface,
+                        style: AppTextStyles.body.copyWith(color: text),
+                      ),
+                      const SizedBox(height: 12),
+                      _Tile(surface: surface, child: _Field(
+                        hint: 'City', controller: _collegeCityCtrl,
+                        textCapitalization: TextCapitalization.words,
+                        textInputAction: TextInputAction.next,
+                      )),
+                    ]),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // ── Languages ───────────────────────────────────────────
+                  _SectionLabel('LANGUAGES', sub),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Wrap(
+                      spacing: 8, runSpacing: 8,
+                      children: _allLanguages.map((lang) {
+                        final selected = _languages.contains(lang);
+                        return FilterChip(
+                          label: Text(lang,
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  color: selected ? AppColors.teal : sub)),
+                          selected: selected,
+                          onSelected: (v) => setState(() {
+                            if (v) _languages.add(lang);
+                            else _languages.remove(lang);
+                          }),
+                          selectedColor: AppColors.teal.withValues(alpha: 0.15),
+                          checkmarkColor: AppColors.teal,
+                          backgroundColor: surface,
+                          side: BorderSide(
+                            color: selected
+                                ? AppColors.teal.withValues(alpha: 0.5)
+                                : isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                          ),
+                        );
+                      }).toList(),
                     ),
                   ),
-
                   const SizedBox(height: 24),
 
                   // ── Contact ─────────────────────────────────────────────
                   _SectionLabel('CONTACT', sub),
-                  _Tile(
-                    surface: surface,
-                    child: _Field(
-                      hint: 'Phone number',
-                      controller: _phoneCtrl,
-                      keyboardType: TextInputType.phone,
-                      textInputAction: TextInputAction.next,
-                    ),
-                  ),
-
+                  _Tile(surface: surface, child: _Field(
+                    hint: 'Phone number',
+                    controller: _phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.next,
+                  )),
                   const SizedBox(height: 24),
 
-                  // ── Role-specific ────────────────────────────────────────
-                  if (user.isDoctor) ...[
-                    _SectionLabel('PROFESSIONAL', sub),
-                    _Tile(
-                      surface: surface,
-                      child: Column(
-                        children: [
-                          _SpecialtyPicker(
-                            value: _selectedSpecialty,
-                            specialties: _specialties,
-                            text: text,
-                            sub: sub,
-                            onChanged: (v) =>
-                                setState(() => _selectedSpecialty = v),
-                          ),
-                          _Divider(isDark),
-                          _Field(
-                            hint: 'Hospital / Institution',
-                            controller: _hospitalCtrl,
-                            textCapitalization: TextCapitalization.words,
-                            textInputAction: TextInputAction.next,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  if (user.isStudent) ...[
-                    _SectionLabel('ACADEMIC', sub),
-                    _Tile(
-                      surface: surface,
-                      child: _Field(
-                        hint: 'College / University',
-                        controller: _collegeCtrl,
-                        textCapitalization: TextCapitalization.words,
-                        textInputAction: TextInputAction.next,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _YearPicker(
-                      selected: _selectedYear,
-                      years: _years,
-                      text: text,
-                      sub: sub,
-                      surface: surface,
-                      onSelect: (y) => setState(() => _selectedYear = y),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // ── Handle ──────────────────────────────────────────────
+                  // ── Profile handle ──────────────────────────────────────
                   _SectionLabel('PROFILE HANDLE', sub),
-                  _Tile(
-                    surface: surface,
-                    child: _Field(
-                      hint: 'your-handle',
-                      controller: _handleCtrl,
-                      prefix: Padding(
-                        padding: const EdgeInsets.only(left: 16, right: 4),
-                        child: Text('@',
-                            style: AppTextStyles.body.copyWith(color: sub)),
-                      ),
-                      textInputAction: TextInputAction.done,
+                  _Tile(surface: surface, child: _Field(
+                    hint: 'your-handle',
+                    controller: _handleCtrl,
+                    prefix: Padding(
+                      padding: const EdgeInsets.only(left: 16, right: 4),
+                      child: Text('@', style: AppTextStyles.body.copyWith(color: sub)),
                     ),
-                  ),
+                    textInputAction: TextInputAction.done,
+                  )),
                   if (_handleError != null)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
                       child: Text(_handleError!,
-                          style: AppTextStyles.caption
-                              .copyWith(color: AppColors.danger)),
+                          style: AppTextStyles.caption.copyWith(color: AppColors.danger)),
                     ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
                     child: Text(
-                      'medgraph.app/dr/${_handleCtrl.text.isNotEmpty ? _handleCtrl.text : 'your-handle'}',
+                      'medgraph.in/dr/${_handleCtrl.text.isNotEmpty ? _handleCtrl.text : 'your-handle'}',
                       style: AppTextStyles.caption.copyWith(color: sub),
                     ),
                   ),
-
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 48),
                 ],
               ),
             ),
@@ -385,199 +504,83 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       ),
     );
   }
-
-  PreferredSizeWidget _buildAppBar(
-      bool isDark, Color text, Color sub) {
-    return AppBar(
-      backgroundColor:
-          isDark ? AppColors.darkBackground : AppColors.lightBackground,
-      elevation: 0,
-      leading: TextButton(
-        onPressed: _loading ? null : () => context.pop(),
-        child: Text('Cancel',
-            style: AppTextStyles.body.copyWith(
-                color: _loading ? sub : text)),
-      ),
-      leadingWidth: 80,
-      title: Text('Edit Profile',
-          style: AppTextStyles.headline.copyWith(color: text)),
-      centerTitle: true,
-      actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: _loading
-              ? const Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              : TextButton(
-                  onPressed: _save,
-                  child: Text('Save',
-                      style: AppTextStyles.body.copyWith(
-                          color: text, fontWeight: FontWeight.w600)),
-                ),
-        ),
-      ],
-    );
-  }
 }
 
-// ─── Avatar picker ─────────────────────────────────────────────────────────────
+// ─── Shared sub-widgets ────────────────────────────────────────────────────────
 
 class _AvatarPicker extends StatelessWidget {
   const _AvatarPicker({
-    required this.user,
-    required this.pickedBytes,
-    required this.uploading,
-    required this.onTap,
+    required this.user, required this.pickedBytes,
+    required this.uploading, required this.onTap,
   });
-
   final UserModel user;
   final Uint8List? pickedBytes;
   final bool uploading;
   final VoidCallback onTap;
 
+  String get _initials {
+    final parts = user.fullName.trim().split(' ');
+    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    return user.fullName.isNotEmpty ? user.fullName[0].toUpperCase() : '?';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Padding(
-      padding: const EdgeInsets.only(top: 28),
-      child: Column(
-        children: [
-          GestureDetector(
-            onTap: onTap,
-            child: Stack(
-              children: [
-                // Avatar circle
-                Container(
-                  width: 90,
-                  height: 90,
-                  decoration: const BoxDecoration(shape: BoxShape.circle),
-                  child: ClipOval(
-                    child: _avatarChild(isDark),
-                  ),
-                ),
-
-                // Camera badge overlay
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white : Colors.black,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color:
-                            isDark ? AppColors.darkBackground : Colors.white,
-                        width: 2,
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.camera_alt,
-                      size: 14,
-                      color: isDark ? Colors.black : Colors.white,
-                    ),
-                  ),
-                ),
-
-                // Loading overlay while uploading
-                if (uploading)
-                  Positioned.fill(
-                    child: ClipOval(
-                      child: Container(
-                        color: Colors.black54,
-                        child: const Center(
-                          child: SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(children: [
+        GestureDetector(
+          onTap: onTap,
+          child: Stack(children: [
+            Container(
+              width: 90, height: 90,
+              decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.teal),
+              child: ClipOval(child: _avatarChild()),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Change photo',
-            style: AppTextStyles.footnote.copyWith(
-              color: isDark
-                  ? AppColors.darkSecondary
-                  : AppColors.lightSecondary,
+            Positioned(
+              right: 0, bottom: 0,
+              child: Container(
+                width: 28, height: 28,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white : Colors.black,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isDark ? AppColors.darkBackground : Colors.white, width: 2),
+                ),
+                child: Icon(Icons.camera_alt, size: 14,
+                    color: isDark ? Colors.black : Colors.white),
+              ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _avatarChild(bool isDark) {
-    // Freshly-picked image (bytes not yet uploaded)
-    if (pickedBytes != null) {
-      return Image.memory(
-        pickedBytes!,
-        width: 90,
-        height: 90,
-        fit: BoxFit.cover,
-      );
-    }
-    // Existing network image
-    if (user.avatarUrl != null && user.avatarUrl!.isNotEmpty) {
-      return Image.network(
-        user.avatarUrl!,
-        width: 90,
-        height: 90,
-        fit: BoxFit.cover,
-        // Initials fallback on error
-        errorBuilder: (_, __, ___) => _Initials(name: user.fullName),
-      );
-    }
-    // Initials fallback
-    return _Initials(name: user.fullName);
-  }
-}
-
-class _Initials extends StatelessWidget {
-  const _Initials({required this.name});
-  final String name;
-
-  String get _letters {
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    return name.isNotEmpty ? name[0].toUpperCase() : '?';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 90,
-      height: 90,
-      color: AppColors.darkSurface2,
-      child: Center(
-        child: Text(
-          _letters,
-          style: const TextStyle(
-              color: Colors.white,
-              fontSize: 32,
-              fontWeight: FontWeight.w600),
+            if (uploading)
+              Positioned.fill(child: ClipOval(
+                child: Container(color: Colors.black54,
+                  child: const Center(child: SizedBox(width: 24, height: 24,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)))),
+              )),
+          ]),
         ),
-      ),
+        const SizedBox(height: 8),
+        Text('Change photo', style: AppTextStyles.footnote.copyWith(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? AppColors.darkSecondary : AppColors.lightSecondary)),
+      ]),
     );
   }
-}
 
-// ─── Reusable helpers ──────────────────────────────────────────────────────────
+  Widget _avatarChild() {
+    if (pickedBytes != null) return Image.memory(pickedBytes!, fit: BoxFit.cover);
+    if (user.avatarUrl != null && user.avatarUrl!.isNotEmpty) {
+      return Image.network(user.avatarUrl!, fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _initialsWidget());
+    }
+    return _initialsWidget();
+  }
+
+  Widget _initialsWidget() => Container(color: AppColors.teal,
+    child: Center(child: Text(_initials, style: const TextStyle(
+        color: Colors.white, fontSize: 32, fontWeight: FontWeight.w600))));
+}
 
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.label, this.color);
@@ -585,20 +588,11 @@ class _SectionLabel extends StatelessWidget {
   final Color color;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-          color: color,
-          letterSpacing: 0.6,
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+    child: Text(label, style: TextStyle(
+        fontSize: 12, fontWeight: FontWeight.w500, color: color, letterSpacing: 0.6)),
+  );
 }
 
 class _Tile extends StatelessWidget {
@@ -607,32 +601,22 @@ class _Tile extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: child,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    child: Container(
+      decoration: BoxDecoration(color: surface, borderRadius: BorderRadius.circular(14)),
+      child: child,
+    ),
+  );
 }
 
 class _Field extends StatelessWidget {
   const _Field({
-    required this.hint,
-    required this.controller,
-    this.keyboardType,
-    this.maxLines = 1,
-    this.maxLength,
-    this.prefix,
-    this.textCapitalization = TextCapitalization.none,
+    required this.hint, required this.controller,
+    this.keyboardType, this.maxLines = 1, this.maxLength,
+    this.prefix, this.textCapitalization = TextCapitalization.none,
     this.textInputAction,
   });
-
   final String hint;
   final TextEditingController controller;
   final TextInputType? keyboardType;
@@ -645,28 +629,22 @@ class _Field extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final text   = isDark ? Colors.white : Colors.black;
-    final sub    = isDark ? AppColors.darkSecondary : AppColors.lightSecondary;
-
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
-      maxLines: maxLines,
-      maxLength: maxLength,
+      maxLines: maxLines, maxLength: maxLength,
       textCapitalization: textCapitalization,
       textInputAction: textInputAction,
-      style: AppTextStyles.body.copyWith(color: text),
+      style: AppTextStyles.body.copyWith(
+          color: isDark ? Colors.white : Colors.black),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: AppTextStyles.body.copyWith(color: sub),
-        border: InputBorder.none,
-        enabledBorder: InputBorder.none,
+        hintStyle: AppTextStyles.body.copyWith(
+            color: isDark ? AppColors.darkSecondary : AppColors.lightSecondary),
+        border: InputBorder.none, enabledBorder: InputBorder.none,
         focusedBorder: InputBorder.none,
-        contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 14),
-        counterText: '',
-        prefixIcon: prefix,
-        filled: false,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        counterText: '', prefixIcon: prefix, filled: false,
       ),
     );
   }
@@ -677,162 +655,8 @@ class _Divider extends StatelessWidget {
   final bool isDark;
 
   @override
-  Widget build(BuildContext context) {
-    return Divider(
-      height: 0.5,
-      thickness: 0.5,
-      indent: 16,
-      endIndent: 0,
-      color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-    );
-  }
-}
-
-class _BioCounter extends StatelessWidget {
-  const _BioCounter(this.length, this.color);
-  final int length;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 4, 20, 0),
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: Text(
-          '$length / 300',
-          style: AppTextStyles.caption.copyWith(color: color),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Specialty picker ──────────────────────────────────────────────────────────
-
-class _SpecialtyPicker extends StatelessWidget {
-  const _SpecialtyPicker({
-    required this.value,
-    required this.specialties,
-    required this.text,
-    required this.sub,
-    required this.onChanged,
-  });
-
-  final String? value;
-  final List<String> specialties;
-  final Color text;
-  final Color sub;
-  final ValueChanged<String?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          hint: Text('Specialty',
-              style: AppTextStyles.body.copyWith(color: sub)),
-          isExpanded: true,
-          icon: Icon(Icons.keyboard_arrow_down, color: sub, size: 20),
-          dropdownColor: Theme.of(context).brightness == Brightness.dark
-              ? AppColors.darkSurface
-              : Colors.white,
-          style: AppTextStyles.body.copyWith(color: text),
-          items: specialties.map((s) =>
-              DropdownMenuItem(value: s, child: Text(s))).toList(),
-          onChanged: onChanged,
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Year picker ───────────────────────────────────────────────────────────────
-
-class _YearPicker extends StatelessWidget {
-  const _YearPicker({
-    required this.selected,
-    required this.years,
-    required this.text,
-    required this.sub,
-    required this.surface,
-    required this.onSelect,
-  });
-
-  final int? selected;
-  final List<int> years;
-  final Color text;
-  final Color sub;
-  final Color surface;
-  final ValueChanged<int?> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          ...years.map((y) {
-            final active = selected == y;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: GestureDetector(
-                onTap: () => onSelect(active ? null : y),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 18, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: active
-                        ? (isDark ? Colors.white : Colors.black)
-                        : surface,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'Year $y',
-                    style: AppTextStyles.footnote.copyWith(
-                      color: active
-                          ? (isDark ? Colors.black : Colors.white)
-                          : sub,
-                      fontWeight: active
-                          ? FontWeight.w600
-                          : FontWeight.w400,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }),
-          GestureDetector(
-            onTap: () => onSelect(selected == 6 ? null : 6),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 18, vertical: 9),
-              decoration: BoxDecoration(
-                color: selected == 6
-                    ? (isDark ? Colors.white : Colors.black)
-                    : surface,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                'Intern',
-                style: AppTextStyles.footnote.copyWith(
-                  color: selected == 6
-                      ? (isDark ? Colors.black : Colors.white)
-                      : sub,
-                  fontWeight: selected == 6
-                      ? FontWeight.w600
-                      : FontWeight.w400,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Divider(
+    height: 0.5, thickness: 0.5, indent: 16, endIndent: 0,
+    color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+  );
 }

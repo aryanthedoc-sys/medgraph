@@ -16,25 +16,28 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  bool _matchBds      = false;
-  bool _sameCollege   = false;
-  bool _sameCity      = false;
-  bool _sameState     = false;
-  bool _savingFilter  = false;
+  bool _matchBds           = false;
+  bool _sameCollege        = false;
+  bool _sameCity           = false;
+  bool _sameState          = false;
+  bool _savingFilter       = false;
+  String _profileVisibility = 'public';
+  bool _showOnlineStatus   = true;
+  bool _showSessionCount   = true;
 
   @override
   void initState() {
     super.initState();
     final u = ref.read(currentUserProvider);
     if (u != null) {
-      _matchBds    = u.proFilterMatchBds;
-      _sameCollege = u.proFilterSameCollege;
-      _sameCity    = u.proFilterSameCity;
-      _sameState   = u.proFilterSameState;
+      _matchBds             = u.proFilterMatchBds;
+      _sameCollege          = u.proFilterSameCollege;
+      _sameCity             = u.proFilterSameCity;
+      _sameState            = u.proFilterSameState;
     }
   }
 
-  Future<void> _saveFilter(String key, bool val) async {
+  Future<void> _savePref(String key, dynamic val) async {
     if (_savingFilter) return;
     setState(() => _savingFilter = true);
     try {
@@ -42,6 +45,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (_) {}
     if (mounted) setState(() => _savingFilter = false);
   }
+
+  Future<void> _saveFilter(String key, bool val) => _savePref(key, val);
 
   Future<void> _logout() async {
     final ok = await showDialog<bool>(
@@ -174,59 +179,134 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 24),
 
-          // ── PRO FILTERS (Pro only) ───────────────────────────────────────────
-          if (isPro) ...[
-            _SectionHeader('MATCHING FILTERS', sub),
-            _SettingsTile(
-              surface: surface, border: border, isDark: isDark,
-              children: [
-                _ToggleRow(
-                  icon: Icons.diversity_3_outlined,
-                  label: 'Match with BDS students',
-                  text: text, sub: sub,
-                  value: _matchBds,
-                  onChanged: (v) {
-                    setState(() => _matchBds = v);
-                    _saveFilter('pro_filter_match_bds', v);
-                  },
+          // ── MATCHING FILTERS (available during free Pro period) ──────────────
+          _SectionHeader('MATCHING FILTERS', sub),
+          _SettingsTile(
+            surface: surface, border: border, isDark: isDark,
+            children: [
+              _ToggleRow(
+                icon: Icons.diversity_3_outlined,
+                label: 'Match with BDS students',
+                text: text, sub: sub,
+                value: _matchBds,
+                onChanged: (v) { setState(() => _matchBds = v); _saveFilter('pro_filter_match_bds', v); },
+              ),
+              _Divider(border),
+              _ToggleRow(
+                icon: Icons.school_outlined,
+                label: 'Same college only',
+                text: text, sub: sub,
+                value: _sameCollege,
+                onChanged: (v) { setState(() => _sameCollege = v); _saveFilter('pro_filter_same_college', v); },
+              ),
+              _Divider(border),
+              _ToggleRow(
+                icon: Icons.location_city_outlined,
+                label: 'Same city only',
+                text: text, sub: sub,
+                value: _sameCity,
+                onChanged: (v) { setState(() => _sameCity = v); _saveFilter('pro_filter_same_city', v); },
+              ),
+              _Divider(border),
+              _ToggleRow(
+                icon: Icons.map_outlined,
+                label: 'Same state only',
+                text: text, sub: sub,
+                value: _sameState,
+                onChanged: (v) { setState(() => _sameState = v); _saveFilter('pro_filter_same_state', v); },
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // ── PRIVACY ─────────────────────────────────────────────────────────
+          _SectionHeader('PRIVACY', sub),
+          _SettingsTile(
+            surface: surface, border: border, isDark: isDark,
+            children: [
+              ListTile(
+                leading: Icon(Icons.visibility_outlined, color: text, size: 20),
+                title: Text('Profile Visibility',
+                    style: AppTextStyles.subheadline.copyWith(color: text)),
+                subtitle: Text(
+                  _profileVisibility == 'public' ? 'Public' : 'Connections only',
+                  style: AppTextStyles.caption.copyWith(color: sub),
                 ),
-                _Divider(border),
-                _ToggleRow(
-                  icon: Icons.school_outlined,
-                  label: 'Same college only',
-                  text: text, sub: sub,
-                  value: _sameCollege,
-                  onChanged: (v) {
-                    setState(() => _sameCollege = v);
-                    _saveFilter('pro_filter_same_college', v);
-                  },
+                trailing: Icon(Icons.chevron_right, color: sub, size: 18),
+                onTap: () => showModalBottomSheet<void>(
+                  context: context,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => Container(
+                    decoration: BoxDecoration(
+                      color: surface,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                    ),
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Profile Visibility',
+                            style: AppTextStyles.headline.copyWith(color: text)),
+                        const SizedBox(height: 16),
+                        RadioListTile<String>(
+                          title: Text('Public', style: AppTextStyles.subheadline.copyWith(color: text)),
+                          subtitle: Text('Anyone can view your profile',
+                              style: AppTextStyles.caption.copyWith(color: sub)),
+                          value: 'public',
+                          groupValue: _profileVisibility,
+                          activeColor: AppColors.teal,
+                          onChanged: (v) {
+                            setState(() => _profileVisibility = v!);
+                            Navigator.pop(context);
+                            _savePref('profile_visibility', v);
+                          },
+                        ),
+                        RadioListTile<String>(
+                          title: Text('Connections only',
+                              style: AppTextStyles.subheadline.copyWith(color: text)),
+                          subtitle: Text('Only followers can view your profile',
+                              style: AppTextStyles.caption.copyWith(color: sub)),
+                          value: 'connections',
+                          groupValue: _profileVisibility,
+                          activeColor: AppColors.teal,
+                          onChanged: (v) {
+                            setState(() => _profileVisibility = v!);
+                            Navigator.pop(context);
+                            _savePref('profile_visibility', v);
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
+                  ),
                 ),
-                _Divider(border),
-                _ToggleRow(
-                  icon: Icons.location_city_outlined,
-                  label: 'Same city only',
-                  text: text, sub: sub,
-                  value: _sameCity,
-                  onChanged: (v) {
-                    setState(() => _sameCity = v);
-                    _saveFilter('pro_filter_same_city', v);
-                  },
-                ),
-                _Divider(border),
-                _ToggleRow(
-                  icon: Icons.map_outlined,
-                  label: 'Same state only',
-                  text: text, sub: sub,
-                  value: _sameState,
-                  onChanged: (v) {
-                    setState(() => _sameState = v);
-                    _saveFilter('pro_filter_same_state', v);
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-          ],
+              ),
+              _Divider(border),
+              _ToggleRow(
+                icon: Icons.circle_outlined,
+                label: 'Show online status',
+                text: text, sub: sub,
+                value: _showOnlineStatus,
+                onChanged: (v) { setState(() => _showOnlineStatus = v); _savePref('show_online_status', v); },
+              ),
+              _Divider(border),
+              _ToggleRow(
+                icon: Icons.bar_chart_outlined,
+                label: 'Show session count',
+                text: text, sub: sub,
+                value: _showSessionCount,
+                onChanged: (v) { setState(() => _showSessionCount = v); _savePref('show_session_count', v); },
+              ),
+              _Divider(border),
+              _NavRow(
+                icon: Icons.block_outlined,
+                label: 'Blocked Accounts',
+                text: text, sub: sub,
+                onTap: () => context.push('/settings/blocked'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
 
           // ── SUPPORT ─────────────────────────────────────────────────────────
           _SectionHeader('SUPPORT', sub),

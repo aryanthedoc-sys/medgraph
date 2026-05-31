@@ -119,6 +119,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       const SizedBox(height: 16),
                     ],
 
+                    // Pro free period banner
+                    if (user != null && user.isPro && user.proExpiresAt != null) ...[
+                      _ProBanner(expiresAt: user.proExpiresAt!),
+                      const SizedBox(height: 16),
+                    ],
+
                     // Streak card
                     StreakCard(
                       streak: user?.currentStreak ?? 0,
@@ -443,6 +449,91 @@ class _HomeVerificationBanner extends StatelessWidget {
               const Icon(Icons.chevron_right, color: Colors.amber, size: 16),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ProBanner extends StatefulWidget {
+  const _ProBanner({required this.expiresAt});
+  final DateTime expiresAt;
+
+  @override
+  State<_ProBanner> createState() => _ProBannerState();
+}
+
+class _ProBannerState extends State<_ProBanner> {
+  bool _dismissed = false;
+
+  int get _daysRemaining {
+    final diff = widget.expiresAt.difference(DateTime.now()).inDays;
+    return diff.clamp(0, 9999);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((p) {
+      final key = 'pro_banner_dismissed_${widget.expiresAt.millisecondsSinceEpoch ~/ 86400000}';
+      if (p.getBool(key) == true && mounted) setState(() => _dismissed = true);
+    });
+  }
+
+  void _dismiss() async {
+    final p = await SharedPreferences.getInstance();
+    final key = 'pro_banner_dismissed_${widget.expiresAt.millisecondsSinceEpoch ~/ 86400000}';
+    await p.setBool(key, true);
+    if (mounted) setState(() => _dismissed = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_dismissed) return const SizedBox.shrink();
+    final urgent = _daysRemaining <= 30;
+    final color  = urgent ? Colors.amber : AppColors.teal;
+    final expiry = '${['Jan','Feb','Mar','Apr','May','Jun',
+        'Jul','Aug','Sep','Oct','Nov','Dec'][widget.expiresAt.month - 1]} ${widget.expiresAt.year}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Text(urgent ? '⏰' : '🎉', style: const TextStyle(fontSize: 18)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  urgent ? 'Pro free period ends in $_daysRemaining days' : 'Pro features are free during launch!',
+                  style: TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600,
+                    color: urgent ? const Color(0xFF7A5600) : color,
+                  ),
+                ),
+                Text(
+                  urgent
+                      ? 'Add payment method to continue →'
+                      : 'Unlimited sessions, matching filters & more until $expiry',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: urgent ? const Color(0xFF7A5600) : color.withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!urgent)
+            GestureDetector(
+              onTap: _dismiss,
+              child: Icon(Icons.close, size: 16, color: color.withValues(alpha: 0.7)),
+            ),
+        ],
       ),
     );
   }
