@@ -66,7 +66,7 @@ function initSocket(io) {
         console.log(`[queue] Looking up userId in DB: ${userId}`);
         const { data: row, error } = await supabaseAdmin
           .from('users')
-          .select('full_name, role, college_name, city, state, is_verified, is_suspended, avatar_url')
+          .select('full_name, role, college_name, is_verified, is_suspended, avatar_url')
           .eq('id', userId)
           .single();
 
