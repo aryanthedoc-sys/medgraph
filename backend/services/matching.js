@@ -137,12 +137,14 @@ function initSocket(io) {
       queue.delete(socket.id);
     });
 
-    socket.on('end-call', ({ roomId }) => {
-      socket.to(roomId).emit('partner-ended');
+    socket.on('end-call', ({ roomId, roomName }) => {
+      const room = roomName || roomId;
+      if (room) socket.to(room).emit('partner-ended');
     });
 
-    socket.on('skip', ({ roomId }) => {
-      socket.to(roomId).emit('partner-skipped');
+    socket.on('skip', ({ roomId, roomName }) => {
+      const room = roomName || roomId;
+      if (room) socket.to(room).emit('partner-skipped');
     });
 
     socket.on('disconnect', () => {
@@ -212,7 +214,7 @@ function recordRecentMatch(userId1, userId2) {
 }
 
 async function createSession(io, socketId1, socketId2, data1, data2) {
-  const roomId = `session-${uuidv4()}`;
+  const roomName = `mg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   queue.delete(socketId1);
   queue.delete(socketId2);
   recordRecentMatch(data1.userId, data2.userId);
@@ -222,7 +224,7 @@ async function createSession(io, socketId1, socketId2, data1, data2) {
       id: uuidv4(),
       user1_id: data1.userId,
       user2_id: data2.userId,
-      room_id: roomId,
+      room_id: roomName,
       topic: data1.filters?.topic || '',
       mode: data1.mode,
       status: 'active',
@@ -234,36 +236,56 @@ async function createSession(io, socketId1, socketId2, data1, data2) {
 
   const s1 = io.sockets.sockets.get(socketId1);
   const s2 = io.sockets.sockets.get(socketId2);
-  if (s1) s1.join(roomId);
-  if (s2) s2.join(roomId);
+  if (s1) s1.join(roomName);
+  if (s2) s2.join(roomName);
 
-  // Pre-generate LiveKit tokens so clients can connect without an extra round-trip.
-  let token1 = '', token2 = '';
+  // Generate LiveKit tokens — if this fails, abort the match rather than
+  // sending empty tokens that produce a silent "missing parameters" error.
+  let token1, token2;
   try {
     [token1, token2] = await Promise.all([
-      generateRoomToken(data1.userId, data1.fullName || data1.userId, roomId),
-      generateRoomToken(data2.userId, data2.fullName || data2.userId, roomId),
+      generateRoomToken(data1.userId, data1.fullName || data1.userId, roomName),
+      generateRoomToken(data2.userId, data2.fullName || data2.userId, roomName),
     ]);
-    console.log('MATCH MADE:', data1.userId, '<->', data2.userId, 'room:', roomId);
   } catch (e) {
-    console.error('LiveKit token generation failed:', e.message);
+    console.error('[match] LiveKit token generation FAILED:', e.message);
+    const errPayload = { message: 'Server error generating call credentials. Please try again.' };
+    io.to(socketId1).emit('queue-error', errPayload);
+    io.to(socketId2).emit('queue-error', errPayload);
+    return;
   }
 
+  const livekitUrl = process.env.LIVEKIT_URL || '';
+  if (!livekitUrl) {
+    console.error('[match] LIVEKIT_URL env var is not set!');
+  }
+
+  console.log('[match] MATCH MADE:', data1.userId, '<->', data2.userId, 'room:', roomName);
+  console.log('[match] payload check — token1 present:', !!token1, '| token2 present:', !!token2, '| livekitUrl:', livekitUrl);
+
   io.to(socketId1).emit('match-found', {
-    roomId,
-    livekitToken:   token1,
-    livekitUrl:     process.env.LIVEKIT_URL,
-    partnerId:      data2.userId,
-    partnerName:    data2.fullName    || 'Your match',
-    partnerCollege: data2.collegeName || '',
+    roomName,
+    livekitToken: token1,
+    livekitUrl,
+    partner: {
+      id:      data2.userId,
+      name:    data2.fullName    || 'Your match',
+      role:    data2.role        || '',
+      college: data2.collegeName || '',
+      avatar:  '',
+    },
   });
   io.to(socketId2).emit('match-found', {
-    roomId,
-    livekitToken:   token2,
-    livekitUrl:     process.env.LIVEKIT_URL,
-    partnerId:      data1.userId,
-    partnerName:    data1.fullName    || 'Your match',
-    partnerCollege: data1.collegeName || '',
+    roomName,
+    livekitToken: token2,
+    livekitUrl,
+    partner: {
+      id:      data1.userId,
+      name:    data1.fullName    || 'Your match',
+      role:    data1.role        || '',
+      college: data1.collegeName || '',
+      avatar:  '',
+    },
   });
 
   // FCM push — fire-and-forget, non-blocking
