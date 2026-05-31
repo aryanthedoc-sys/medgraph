@@ -9,12 +9,16 @@ class VideoCallScreen extends StatelessWidget {
   const VideoCallScreen({
     super.key,
     required this.roomId,
+    required this.token,
+    required this.livekitUrl,
     required this.partnerName,
     required this.partnerCollege,
     this.partnerAvatarUrl,
   });
 
   final String roomId;
+  final String token;
+  final String livekitUrl;
   final String partnerName;
   final String partnerCollege;
   final String? partnerAvatarUrl;

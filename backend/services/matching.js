@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { supabaseAdmin } = require('./supabase');
 const { sendPush } = require('./fcm');
+const { generateRoomToken } = require('./livekit');
 
 // In-memory queue: Map<socketId, { userId, mode, filters, joinedAt }>
 const queue = new Map();
@@ -236,15 +237,30 @@ async function createSession(io, socketId1, socketId2, data1, data2) {
   if (s1) s1.join(roomId);
   if (s2) s2.join(roomId);
 
-  // Names and college are already in the queue entry — no extra DB round-trip needed.
+  // Pre-generate LiveKit tokens so clients can connect without an extra round-trip.
+  let token1 = '', token2 = '';
+  try {
+    [token1, token2] = await Promise.all([
+      generateRoomToken(data1.userId, data1.fullName || data1.userId, roomId),
+      generateRoomToken(data2.userId, data2.fullName || data2.userId, roomId),
+    ]);
+    console.log('MATCH MADE:', data1.userId, '<->', data2.userId, 'room:', roomId);
+  } catch (e) {
+    console.error('LiveKit token generation failed:', e.message);
+  }
+
   io.to(socketId1).emit('match-found', {
     roomId,
+    livekitToken:   token1,
+    livekitUrl:     process.env.LIVEKIT_URL,
     partnerId:      data2.userId,
     partnerName:    data2.fullName    || 'Your match',
     partnerCollege: data2.collegeName || '',
   });
   io.to(socketId2).emit('match-found', {
     roomId,
+    livekitToken:   token2,
+    livekitUrl:     process.env.LIVEKIT_URL,
     partnerId:      data1.userId,
     partnerName:    data1.fullName    || 'Your match',
     partnerCollege: data1.collegeName || '',

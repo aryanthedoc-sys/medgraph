@@ -19,12 +19,16 @@ class VideoCallScreen extends StatefulWidget {
   const VideoCallScreen({
     super.key,
     required this.roomId,
+    required this.token,
+    required this.livekitUrl,
     required this.partnerName,
     required this.partnerCollege,
     this.partnerAvatarUrl,
   });
 
   final String roomId;
+  final String token;
+  final String livekitUrl;
   final String partnerName;
   final String partnerCollege;
   final String? partnerAvatarUrl;
@@ -100,16 +104,9 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     }
 
     try {
-      final data = await ApiService.post(
-        '/api/rooms/token',
-        {'roomId': widget.roomId},
-      );
-      final token      = data['token']      as String;
-      final livekitUrl = data['livekitUrl'] as String;
-
       await _room.connect(
-        livekitUrl,
-        token,
+        widget.livekitUrl,
+        widget.token,
         roomOptions: const lk.RoomOptions(
           adaptiveStream: true,
           dynacast: true,

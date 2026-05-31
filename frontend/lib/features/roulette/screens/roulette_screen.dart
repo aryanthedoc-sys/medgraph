@@ -47,12 +47,16 @@ class _RouletteScreenState extends ConsumerState<RouletteScreen>
 
     SocketService.on('match-found', (data) {
       if (!mounted) return;
-      final roomId      = data['roomId'] as String;
-      final partnerName = data['partnerName'] as String? ?? 'Your match';
+      final roomId         = data['roomId']         as String;
+      final livekitToken   = data['livekitToken']   as String? ?? '';
+      final livekitUrl     = data['livekitUrl']     as String? ?? '';
+      final partnerName    = data['partnerName']    as String? ?? 'Your match';
       final partnerCollege = data['partnerCollege'] as String? ?? '';
       Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => VideoCallScreen(
           roomId: roomId,
+          token: livekitToken,
+          livekitUrl: livekitUrl,
           partnerName: partnerName,
           partnerCollege: partnerCollege,
         ),
