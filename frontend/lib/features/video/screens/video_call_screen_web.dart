@@ -16,20 +16,16 @@ import '../../../shared/services/socket_service.dart';
 class VideoCallScreen extends StatefulWidget {
   const VideoCallScreen({
     super.key,
-    required this.roomId,
+    required this.roomName,
     required this.token,
     required this.livekitUrl,
-    required this.partnerName,
-    required this.partnerCollege,
-    this.partnerAvatarUrl,
+    required this.partnerInfo,
   });
 
-  final String roomId;
+  final String roomName;
   final String token;
   final String livekitUrl;
-  final String partnerName;
-  final String partnerCollege;
-  final String? partnerAvatarUrl;
+  final Map<String, dynamic> partnerInfo;
 
   @override
   State<VideoCallScreen> createState() => _VideoCallScreenState();
@@ -39,13 +35,16 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   bool _ready = false;
   html.EventListener? _msgListener;
 
-  String get _viewId => 'livekit-${widget.roomId}';
+  String get _partnerName    => (widget.partnerInfo['name']    as String?) ?? 'Partner';
+  String get _partnerCollege => (widget.partnerInfo['college'] as String?) ?? '';
+
+  String get _viewId => 'livekit-${widget.roomName}';
 
   String get _iframeSrc {
     final url   = Uri.encodeComponent(widget.livekitUrl);
     final token = Uri.encodeComponent(widget.token);
     final name  = Uri.encodeComponent(
-      widget.partnerName.isNotEmpty ? widget.partnerName : 'MedGraph User',
+      _partnerName.isNotEmpty ? _partnerName : 'MedGraph User',
     );
     return '/livekit_meet.html?url=$url&token=$token&name=$name';
   }
@@ -98,12 +97,12 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   }
 
   void _leave() {
-    SocketService.emit('end-call', {'roomId': widget.roomId});
+    SocketService.emit('end-call', {'roomId': widget.roomName});
     if (mounted) context.go('/home');
   }
 
   String get _initials {
-    final parts = widget.partnerName.trim().split(' ');
+    final parts = _partnerName.trim().split(' ');
     return parts.map((w) => w.isNotEmpty ? w[0] : '').take(2).join().toUpperCase();
   }
 
@@ -159,7 +158,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            widget.partnerName,
+                            _partnerName,
                             style: AppTextStyles.subheadline.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.w600,
@@ -167,9 +166,9 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          if (widget.partnerCollege.isNotEmpty)
+                          if (_partnerCollege.isNotEmpty)
                             Text(
-                              widget.partnerCollege,
+                              _partnerCollege,
                               style: const TextStyle(
                                 color: Colors.white54, fontSize: 12,
                               ),

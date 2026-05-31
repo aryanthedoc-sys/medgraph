@@ -47,21 +47,46 @@ class _RouletteScreenState extends ConsumerState<RouletteScreen>
 
     SocketService.on('match-found', (data) {
       if (!mounted) return;
-      final roomId         = data['roomId']         as String;
-      final livekitToken   = data['livekitToken']   as String? ?? '';
-      final livekitUrl     = data['livekitUrl']     as String? ?? '';
-      final partnerName    = data['partnerName']    as String? ?? 'Your match';
-      final partnerCollege = data['partnerCollege'] as String? ?? '';
+
+      // Debug — visible in Flutter DevTools / console
+      // ignore: avoid_print
+      print('RAW match-found data: $data');
+
+      final roomName   = (data['roomName']     as String?) ?? '';
+      final token      = (data['livekitToken'] as String?) ?? '';
+      final livekitUrl = (data['livekitUrl']   as String?) ?? '';
+      final partner    = (data['partner']      as Map?)    ?? {};
+
+      // ignore: avoid_print
+      print('[match-found] roomName=$roomName | token present=${token.isNotEmpty} | url=$livekitUrl | partner=$partner');
+
+      if (roomName.isEmpty || token.isEmpty || livekitUrl.isEmpty) {
+        // ignore: avoid_print
+        print('[match-found] ERROR: missing connection params — aborting navigation');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Match found but connection failed. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() => _state = _MatchState.idle);
+        return;
+      }
+
+      setState(() => _state = _MatchState.idle);
       Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => VideoCallScreen(
-          roomId: roomId,
-          token: livekitToken,
+          roomName: roomName,
+          token: token,
           livekitUrl: livekitUrl,
-          partnerName: partnerName,
-          partnerCollege: partnerCollege,
+          partnerInfo: {
+            'name':    (partner['name']    as String?) ?? 'Partner',
+            'role':    (partner['role']    as String?) ?? '',
+            'college': (partner['college'] as String?) ?? '',
+            'avatar':  (partner['avatar']  as String?) ?? '',
+          },
         ),
       ));
-      setState(() => _state = _MatchState.idle);
     });
 
     SocketService.on('queue-timeout', (_) {

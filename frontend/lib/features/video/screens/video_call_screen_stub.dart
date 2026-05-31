@@ -8,25 +8,23 @@ import '../../../core/theme/app_text_styles.dart';
 class VideoCallScreen extends StatelessWidget {
   const VideoCallScreen({
     super.key,
-    required this.roomId,
+    required this.roomName,
     required this.token,
     required this.livekitUrl,
-    required this.partnerName,
-    required this.partnerCollege,
-    this.partnerAvatarUrl,
+    required this.partnerInfo,
   });
 
-  final String roomId;
+  final String roomName;
   final String token;
   final String livekitUrl;
-  final String partnerName;
-  final String partnerCollege;
-  final String? partnerAvatarUrl;
+  final Map<String, dynamic> partnerInfo;
 
   @override
   Widget build(BuildContext context) {
-    final initials = partnerName.trim().isNotEmpty
-        ? partnerName.trim().split(' ').map((w) => w[0]).take(2).join().toUpperCase()
+    final name     = (partnerInfo['name']    as String?) ?? 'Partner';
+    final college  = (partnerInfo['college'] as String?) ?? '';
+    final initials = name.trim().isNotEmpty
+        ? name.trim().split(' ').map((w) => w[0]).take(2).join().toUpperCase()
         : '?';
 
     return Scaffold(
@@ -53,7 +51,7 @@ class VideoCallScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  partnerName,
+                  name,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -61,10 +59,10 @@ class VideoCallScreen extends StatelessWidget {
                   ),
                   textAlign: TextAlign.center,
                 ),
-                if (partnerCollege.isNotEmpty) ...[
+                if (college.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
-                    partnerCollege,
+                    college,
                     style: const TextStyle(color: Colors.white54, fontSize: 14),
                     textAlign: TextAlign.center,
                   ),

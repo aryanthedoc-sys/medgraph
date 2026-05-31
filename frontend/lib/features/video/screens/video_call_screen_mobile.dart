@@ -11,33 +11,29 @@ import '../../../shared/services/api_service.dart';
 import '../../../shared/services/socket_service.dart';
 import '../../../shared/widgets/disclaimer_overlay.dart';
 
-/// LiveKit WebRTC video call screen.
-/// Connects to the LiveKit room identified by [roomId] after fetching
-/// a short-lived JWT from the backend. Falls back to a named-avatar
-/// placeholder when the remote participant has video disabled.
 class VideoCallScreen extends StatefulWidget {
   const VideoCallScreen({
     super.key,
-    required this.roomId,
+    required this.roomName,
     required this.token,
     required this.livekitUrl,
-    required this.partnerName,
-    required this.partnerCollege,
-    this.partnerAvatarUrl,
+    required this.partnerInfo,
   });
 
-  final String roomId;
+  final String roomName;
   final String token;
   final String livekitUrl;
-  final String partnerName;
-  final String partnerCollege;
-  final String? partnerAvatarUrl;
+  final Map<String, dynamic> partnerInfo;
 
   @override
   State<VideoCallScreen> createState() => _VideoCallScreenState();
 }
 
 class _VideoCallScreenState extends State<VideoCallScreen> {
+  // ── Partner info convenience getters ─────────────────────────────────────────
+  String get _partnerName    => (widget.partnerInfo['name']    as String?) ?? 'Partner';
+  String get _partnerCollege => (widget.partnerInfo['college'] as String?) ?? '';
+
   // ── LiveKit ──────────────────────────────────────────────────────────────────
   final lk.Room _room = lk.Room();
   bool _connected    = false;
@@ -66,6 +62,19 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   @override
   void initState() {
     super.initState();
+    // ignore: avoid_print
+    print('[VideoCallScreen] starting — room=${widget.roomName} url=${widget.livekitUrl} tokenLen=${widget.token.length}');
+    if (widget.roomName.isEmpty || widget.token.isEmpty || widget.livekitUrl.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _connecting   = false;
+            _connectError = 'Missing connection parameters (room=${widget.roomName.isEmpty}, token=${widget.token.isEmpty}, url=${widget.livekitUrl.isEmpty})';
+          });
+        }
+      });
+      return;
+    }
     _room.addListener(_onRoomUpdate);
     _startTimer();
     _scheduleOverlayHide();
@@ -232,17 +241,17 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     _ending = true;
     _timer?.cancel();
     _room.disconnect();
-    SocketService.emit('end-call', {'roomId': widget.roomId, 'reason': reason});
+    SocketService.emit('end-call', {'roomId': widget.roomName, 'reason': reason});
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     if (!mounted) return;
     if (reason == 'ended') {
       _showNotesSheet();
     } else if (reason == 'limit') {
-      ApiService.post('/api/sessions/${widget.roomId}/end',
+      ApiService.post('/api/sessions/${widget.roomName}/end',
           {'durationSeconds': _seconds}).catchError((_) => <String, dynamic>{});
       _showLimitDialog();
     } else {
-      ApiService.post('/api/sessions/${widget.roomId}/end',
+      ApiService.post('/api/sessions/${widget.roomName}/end',
           {'durationSeconds': _seconds}).catchError((_) => <String, dynamic>{});
       Navigator.of(context).pop();
     }
@@ -256,8 +265,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
       enableDrag: false,
       backgroundColor: Colors.transparent,
       builder: (_) => _NotesSheet(
-        roomId: widget.roomId,
-        partnerName: widget.partnerName,
+        roomId: widget.roomName,
+        partnerName: _partnerName,
         durationSeconds: _seconds,
       ),
     ).whenComplete(() {
@@ -267,7 +276,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
 
   void _skip() {
     HapticFeedback.mediumImpact();
-    SocketService.emit('skip', {'roomId': widget.roomId});
+    SocketService.emit('skip', {'roomId': widget.roomName});
     _room.disconnect();
     Navigator.of(context).pop();
   }
@@ -370,7 +379,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                       remoteVideo,
                       fit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
                     )
-                  : _RemotePlaceholder(name: widget.partnerName),
+                  : _RemotePlaceholder(name: _partnerName),
             ),
 
             // ── Local PiP (top-right corner) ─────────────────────────────
@@ -417,8 +426,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
               opacity: _overlayVisible ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 300),
               child: _TopOverlay(
-                partnerName: widget.partnerName,
-                partnerCollege: widget.partnerCollege,
+                partnerName: _partnerName,
+                partnerCollege: _partnerCollege,
                 duration: _duration,
               ),
             ),
@@ -716,7 +725,7 @@ class _NotesSheetState extends State<_NotesSheet> {
 
   Future<void> _skip() async {
     await ApiService.post(
-      '/api/sessions/${widget.roomId}/end',
+      '/api/sessions/${widget.roomName}/end',
       {'durationSeconds': widget.durationSeconds},
     ).catchError((_) => <String, dynamic>{});
     if (mounted) Navigator.pop(context);
@@ -726,7 +735,7 @@ class _NotesSheetState extends State<_NotesSheet> {
     setState(() => _saving = true);
     final notes = _ctrl.text.trim();
     await ApiService.post(
-      '/api/sessions/${widget.roomId}/end',
+      '/api/sessions/${widget.roomName}/end',
       {
         'durationSeconds': widget.durationSeconds,
         if (notes.isNotEmpty) 'summaryNotes': notes,
@@ -774,7 +783,7 @@ class _NotesSheetState extends State<_NotesSheet> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'with ${widget.partnerName}  ·  $_durationLabel',
+                  'with ${_partnerName}  ·  $_durationLabel',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white54, fontSize: 13),
