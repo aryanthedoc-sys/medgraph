@@ -104,29 +104,16 @@ router.post('/verify-otp', async (req, res, next) => {
     let user = existingUser;
 
     if (!user) {
-      // Build insert row — let Postgres auto-generate the UUID
+      // Minimal insert — only columns guaranteed to exist at registration time.
+      // Profile details (college, specialty, mrn, etc.) are filled in during setup.
       const userRow = {
-        email:   lower,
-        full_name: safeName,
-        role:    safeRole,
-        status:  'pending_verification',
-        is_pro:  true,
+        email:          lower,
+        full_name:      safeName,
+        role:           safeRole,
+        status:         'pending_verification',
+        is_pro:         true,
         pro_expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
       };
-
-      if (safeRole !== 'doctor') {
-        if (entry?.collegeName)  userRow.college_name  = entry.collegeName;
-        if (entry?.collegeCity)  userRow.college_city  = entry.collegeCity;
-        if (entry?.collegeState) userRow.college_state = entry.collegeState;
-        if (entry?.university)   userRow.university    = entry.university;
-        if (entry?.yearOfStudy)  userRow.year_of_study = String(entry.yearOfStudy || '');
-      }
-
-      if (safeRole === 'doctor') {
-        if (entry?.specialty)       userRow.specialty        = entry.specialty;
-        if (entry?.nmcNumber)       userRow.mrn              = entry.nmcNumber;
-        if (entry?.yearsExperience) userRow.years_experience = parseInt(entry.yearsExperience) || null;
-      }
 
       const { data: newUser, error: insertError } = await supabaseAdmin
         .from('users')
