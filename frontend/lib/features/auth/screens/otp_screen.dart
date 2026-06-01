@@ -67,25 +67,31 @@ class _OTPScreenState extends State<OTPScreen> {
       // ignore: avoid_print
       print('Verify response: $res');
 
-      if (res['ok'] != true) {
+      // Support both new { success, token } and legacy { ok, accessToken } shapes
+      final isSuccess = res['success'] == true || res['ok'] == true;
+      if (!isSuccess) {
         setState(() => _error = 'Verification failed. Please try again.');
         return;
       }
 
-      final accessToken = res['accessToken'] as String?;
-      if (accessToken == null || accessToken.isEmpty) {
+      // Prefer new 'token' field, fall back to legacy 'accessToken'
+      final token = (res['token'] ?? res['accessToken']) as String?;
+      if (token == null || token.isEmpty) {
         setState(() => _error = 'No token returned from server. Please try again.');
         return;
       }
-      final userId = res['userId'] as String?;
+
+      // Prefer new user object, fall back to legacy userId field
+      final userMap   = res['user'] as Map<String, dynamic>?;
+      final userId    = (userMap?['id'] ?? res['userId']) as String?;
       // ignore: avoid_print
-      print('OTP verified — userId: $userId');
+      print('OTP verified — userId: $userId token length: ${token.length}');
 
       // Persist token + userId; all subsequent API calls use AuthStorage
-      await AuthStorage.save(accessToken, userId: userId);
+      await AuthStorage.save(token, userId: userId);
 
       if (!mounted) return;
-      // All new users go to proof upload; returning users go home
+      // New users go to proof upload; returning users go home
       final isNewUser = res['isNewUser'] as bool? ?? true;
       context.go(isNewUser ? '/register/proof-upload' : '/home');
     } on ApiException catch (e) {

@@ -2,8 +2,8 @@ const express  = require('express');
 const router   = express.Router();
 const crypto   = require('crypto');
 const multer   = require('multer');
+const jwt      = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
-const { createClient } = require('@supabase/supabase-js');
 const { supabaseAdmin } = require('../services/supabase');
 const {
   sendOTP,
@@ -75,7 +75,7 @@ router.post('/verify-otp', async (req, res, next) => {
   try {
     const { email, otp, name: bodyName, role: bodyRole } = req.body;
     console.log('Verify OTP body:', { email, otp: '***', name: bodyName, role: bodyRole });
-    const lower = email?.toLowerCase();
+    const lower = email?.toLowerCase().trim();
     const entry = otpStore.get(lower);
 
     if (!entry || entry.otp !== otp || Date.now() > entry.expiresAt) {
@@ -90,93 +90,95 @@ router.post('/verify-otp', async (req, res, next) => {
       'student_bams': 'student_bams',
       'doctor':       'doctor',
     };
-    const rawRole = entry?.userType || bodyRole;
+    const rawRole  = entry?.userType || bodyRole;
     const safeRole = roleMap[rawRole] || 'student_mbbs';
     const safeName = ((entry?.name || bodyName || '').trim()) || 'User';
 
-    // Create Supabase Auth user with a temporary password
-    const tempPassword = uuidv4();
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: lower,
-      password: tempPassword,
-      email_confirm: true,
-    });
-    if (authError) throw authError;
-
-    // Build user row
-    const userRow = {
-      id: authData.user.id,
-      email: lower,
-      full_name: safeName,
-      role: safeRole,
-      status: 'pending_verification',
-      is_verified: false,
-    };
-
-    // Student-specific fields
-    if (safeRole !== 'doctor') {
-      if (entry?.collegeName)  userRow.college_name  = entry.collegeName;
-      if (entry?.collegeCity)  userRow.college_city  = entry.collegeCity;
-      if (entry?.collegeState) userRow.college_state = entry.collegeState;
-      if (entry?.university)   userRow.university    = entry.university;
-      if (entry?.yearOfStudy)  userRow.year_of_study = String(entry.yearOfStudy || '');
-    }
-
-    // Doctor-specific fields
-    if (safeRole === 'doctor') {
-      if (entry?.specialty)       userRow.specialty         = entry.specialty;
-      if (entry?.nmcNumber)       userRow.mrn               = entry.nmcNumber;
-      if (entry?.yearsExperience) userRow.years_experience  = parseInt(entry.yearsExperience) || null;
-    }
-
-    // Insert profile row
-    const { data: profileData, error: insertError } = await supabaseAdmin
+    // Check if user already exists in public.users
+    const { data: existingUser } = await supabaseAdmin
       .from('users')
-      .insert(userRow)
-      .select()
-      .single();
+      .select('id, email, full_name, role, status, is_pro')
+      .eq('email', lower)
+      .maybeSingle();
 
-    if (insertError) {
-      console.error('Supabase insert error:', JSON.stringify(insertError));
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      throw insertError;
+    let user = existingUser;
+
+    if (!user) {
+      // Build insert row — let Postgres auto-generate the UUID
+      const userRow = {
+        email:   lower,
+        full_name: safeName,
+        role:    safeRole,
+        status:  'pending_verification',
+        is_pro:  true,
+        pro_expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+      };
+
+      if (safeRole !== 'doctor') {
+        if (entry?.collegeName)  userRow.college_name  = entry.collegeName;
+        if (entry?.collegeCity)  userRow.college_city  = entry.collegeCity;
+        if (entry?.collegeState) userRow.college_state = entry.collegeState;
+        if (entry?.university)   userRow.university    = entry.university;
+        if (entry?.yearOfStudy)  userRow.year_of_study = String(entry.yearOfStudy || '');
+      }
+
+      if (safeRole === 'doctor') {
+        if (entry?.specialty)       userRow.specialty        = entry.specialty;
+        if (entry?.nmcNumber)       userRow.mrn              = entry.nmcNumber;
+        if (entry?.yearsExperience) userRow.years_experience = parseInt(entry.yearsExperience) || null;
+      }
+
+      const { data: newUser, error: insertError } = await supabaseAdmin
+        .from('users')
+        .insert(userRow)
+        .select('id, email, full_name, role, status, is_pro')
+        .single();
+
+      if (insertError) {
+        console.error('User insert error:', JSON.stringify(insertError));
+        return res.status(500).json({
+          success: false,
+          error: insertError.message,
+          debug: { code: insertError.code, details: insertError.details },
+        });
+      }
+
+      user = newUser;
+      console.log('New user created with id:', user.id);
+    } else {
+      console.log('Existing user found with id:', user.id);
     }
-    console.log('Profile created:', profileData?.id);
 
-    // Sign in server-side to return a real JWT
-    const anonClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-    const { data: signInData, error: signInError } = await anonClient.auth.signInWithPassword({
-      email: lower,
-      password: tempPassword,
-    });
-    if (signInError) {
-      console.error('Server-side sign-in failed:', signInError.message);
-      return res.json({ ok: true, isNewUser: true, tempPassword });
-    }
+    // Generate custom JWT using public.users id
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+    console.log('JWT generated for user.id:', user.id);
 
-    res.json({
-      ok: true,
-      isNewUser: true,
-      userId:       authData.user.id,
-      accessToken:  signInData.session.access_token,
-      refreshToken: signInData.session.refresh_token,
+    return res.json({
+      success: true,
+      ok: true,           // keep ok:true for backward compat
+      isNewUser: !existingUser,
+      token,
+      accessToken: token, // keep accessToken for backward compat
+      userId: user.id,    // keep userId for backward compat
+      user: {
+        id:        user.id,
+        email:     user.email,
+        full_name: user.full_name,
+        role:      user.role,
+        status:    user.status,
+        is_pro:    user.is_pro,
+      },
     });
   } catch (err) {
-    console.error('=== USER CREATE ERROR ===');
-    console.error('code:', err.code);
-    console.error('message:', err.message);
-    console.error('details:', err.details);
-    console.error('hint:', err.hint);
-    console.error('full:', JSON.stringify(err));
+    console.error('=== VERIFY OTP ERROR ===', err.message);
     return res.status(500).json({
       success: false,
-      error: 'Database error creating new user',
-      debug: {
-        code: err.code,
-        message: err.message,
-        details: err.details,
-        hint: err.hint,
-      },
+      error: err.message,
+      debug: { code: err.code, details: err.details },
     });
   }
 });
@@ -310,41 +312,32 @@ router.post('/register-doctor', async (req, res, next) => {
       .from('users')
       .select('id')
       .eq('email', lower)
-      .single();
+      .maybeSingle();
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
     const slug   = fullName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     const handle = `dr-${slug}-${Math.floor(100 + Math.random() * 900)}`;
-    const tempPassword = uuidv4();
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: lower,
-      password: tempPassword,
-      email_confirm: true,
-    });
-    if (authError) throw authError;
 
-    const { error: insertError } = await supabaseAdmin
+    // Insert directly into public.users — no Supabase Auth
+    const { data: newUser, error: insertError } = await supabaseAdmin
       .from('users')
       .insert({
-        id: authData.user.id,
         email: lower,
         full_name: fullName,
         role: 'doctor',
         status: 'pending_verification',
         is_verified: false,
+        mrn,
+        specialty,
+        hospital: hospital || null,
+        years_experience: yearsExperience ? parseInt(yearsExperience) : null,
+        id_photo_url: idPhotoUrl || null,
+        handle,
       })
-      .select()
+      .select('id')
       .single();
 
-    if (insertError) {
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      throw insertError;
-    }
-
-    await supabaseAdmin
-      .from('users')
-      .update({ mrn, specialty, hospital, years_experience: yearsExperience, id_photo_url: idPhotoUrl, handle })
-      .eq('id', authData.user.id);
+    if (insertError) throw insertError;
 
     res.json({ ok: true });
   } catch (err) {

@@ -1,9 +1,9 @@
 const jwt = require('jsonwebtoken');
-const { supabaseAdmin } = require('../services/supabase');
 
 /**
- * Verifies the Bearer JWT from Supabase Auth.
- * Attaches req.user = { id, email, role, status, isPro } on success.
+ * Verifies the custom JWT signed with JWT_SECRET.
+ * Attaches req.user = { id, email, role } on success.
+ * The id is the UUID from public.users — no Supabase Auth involved.
  */
 async function authMiddleware(req, res, next) {
   try {
@@ -13,25 +13,19 @@ async function authMiddleware(req, res, next) {
     }
     const token = header.slice(7);
 
-    // Verify via Supabase (handles expiry, revocation)
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !user) {
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (jwtErr) {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
-    // Fetch profile row for role + status
-    const { data: profile } = await supabaseAdmin
-      .from('users')
-      .select('role, status, is_pro, pro_expires_at')
-      .eq('id', user.id)
-      .single();
+    console.log('Auth middleware - decoded id:', decoded.id, 'email:', decoded.email);
 
     req.user = {
-      id:     user.id,
-      email:  user.email,
-      role:   profile?.role   ?? 'student',
-      status: profile?.status ?? 'pending_verification',
-      isPro:  profile?.is_pro && new Date(profile.pro_expires_at) > new Date(),
+      id:    decoded.id,
+      email: decoded.email,
+      role:  decoded.role,
     };
     next();
   } catch (err) {
@@ -40,8 +34,8 @@ async function authMiddleware(req, res, next) {
 }
 
 /**
- * Same as authMiddleware but only blocks if token is present and invalid.
- * Allows unauthenticated access (req.user will be null).
+ * Same as authMiddleware but allows unauthenticated access.
+ * req.user will be null if no token is present.
  */
 async function optionalAuth(req, res, next) {
   const header = req.headers.authorization;

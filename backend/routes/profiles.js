@@ -27,24 +27,32 @@ const PROFILE_SELECT = `
 // ─── GET /me ──────────────────────────────────────────────────────────────────
 router.get('/me', auth, async (req, res, next) => {
   try {
+    console.log('GET /me — looking for id:', req.user.id, 'email:', req.user.email);
+
     let { data, error } = await supabaseAdmin
-      .from('users').select('*').eq('id', req.user.id).single();
+      .from('users').select('*').eq('id', req.user.id).maybeSingle();
+
+    console.log('GET /me — found by id:', data?.email, 'error:', error?.message);
 
     // Fallback: if no row found by id, try by email (handles stale tokens)
-    if ((!data || error) && req.user.email) {
+    if (!data && req.user.email) {
       const result = await supabaseAdmin
-        .from('users').select('*').eq('email', req.user.email).single();
+        .from('users').select('*').eq('email', req.user.email).maybeSingle();
       data  = result.data;
       error = result.error;
+      if (data) {
+        console.log('GET /me — found by email fallback. JWT id:', req.user.id, '→ DB id:', data.id);
+      }
     }
 
     if (!data) {
-      console.error('Profile not found for id:', req.user.id, 'email:', req.user.email);
+      console.error('GET /me — not found. id:', req.user.id, 'email:', req.user.email);
       return res.status(404).json({
         error: 'Profile not found',
-        debug: { id: req.user.id, email: req.user.email },
+        debug: { looked_for_id: req.user.id, email: req.user.email },
       });
     }
+
     res.json({ user: data });
   } catch (err) { next(err); }
 });
