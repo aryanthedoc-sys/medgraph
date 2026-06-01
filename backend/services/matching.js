@@ -183,6 +183,19 @@ async function createSession(io, user1, user2) {
     console.error('[session] Failed to persist:', e.message);
   }
 
+  // Auto-create conversation between matched users
+  try {
+    const [u1, u2] =
+      user1.userId < user2.userId
+        ? [user1.userId, user2.userId]
+        : [user2.userId, user1.userId];
+    await supabaseAdmin
+      .from('conversations')
+      .upsert({ user1_id: u1, user2_id: u2 }, { onConflict: 'user1_id,user2_id' });
+  } catch (e) {
+    console.error('[match] Failed to create conversation:', e.message);
+  }
+
   const s1 = io.sockets.sockets.get(user1.socketId);
   const s2 = io.sockets.sockets.get(user2.socketId);
   if (s1) s1.join(roomName);

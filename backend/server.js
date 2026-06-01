@@ -22,6 +22,7 @@ const leaderboardRoutes = require('./routes/leaderboard');
 const uploadsRoutes        = require('./routes/uploads');
 const notificationsRoutes  = require('./routes/notifications');
 const reportsRoutes        = require('./routes/reports');
+const messagesRoutes       = require('./routes/messages');
 
 require('./cron/jobs'); // register all cron jobs
 
@@ -55,7 +56,31 @@ const io = new Server(server, {
   },
   transports: ['websocket', 'polling'],
 });
+
+// Track online users for direct message delivery
+global.onlineUsers = new Map();
+global.io = io;
+
 initSocket(io);
+
+// Online presence tracking for messaging
+io.on('connection', (socket) => {
+  socket.on('user_online', (userId) => {
+    if (userId) {
+      global.onlineUsers.set(userId, socket.id);
+      console.log('[presence] User online:', userId);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    for (const [uid, sid] of global.onlineUsers) {
+      if (sid === socket.id) {
+        global.onlineUsers.delete(uid);
+        break;
+      }
+    }
+  });
+});
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false })); // CSP off for admin panel
@@ -81,6 +106,7 @@ app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/uploads',        uploadsRoutes);
 app.use('/api/notifications',  notificationsRoutes);
 app.use('/api/users',          reportsRoutes);
+app.use('/api/messages',       messagesRoutes);
 
 // ─── Global error handler ─────────────────────────────────────────────────────
 app.use((err, req, res, _next) => {

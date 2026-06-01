@@ -27,9 +27,24 @@ const PROFILE_SELECT = `
 // ─── GET /me ──────────────────────────────────────────────────────────────────
 router.get('/me', auth, async (req, res, next) => {
   try {
-    const { data, error } = await supabaseAdmin
+    let { data, error } = await supabaseAdmin
       .from('users').select('*').eq('id', req.user.id).single();
-    if (error || !data) return res.status(404).json({ error: 'User not found' });
+
+    // Fallback: if no row found by id, try by email (handles stale tokens)
+    if ((!data || error) && req.user.email) {
+      const result = await supabaseAdmin
+        .from('users').select('*').eq('email', req.user.email).single();
+      data  = result.data;
+      error = result.error;
+    }
+
+    if (!data) {
+      console.error('Profile not found for id:', req.user.id, 'email:', req.user.email);
+      return res.status(404).json({
+        error: 'Profile not found',
+        debug: { id: req.user.id, email: req.user.email },
+      });
+    }
     res.json({ user: data });
   } catch (err) { next(err); }
 });

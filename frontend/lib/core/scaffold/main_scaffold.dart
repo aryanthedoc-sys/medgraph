@@ -23,7 +23,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
     _TabItem(icon: Icons.home_outlined, activeIcon: Icons.home, label: 'Home', path: '/home'),
     _TabItem(icon: Icons.play_circle_outline, activeIcon: Icons.play_circle, label: 'Feed', path: '/feed'),
     _TabItem(icon: Icons.radio_button_unchecked, activeIcon: Icons.radio_button_checked, label: 'Match', path: '/roulette'),
-    _TabItem(icon: Icons.calendar_today_outlined, activeIcon: Icons.calendar_today, label: 'Sessions', path: '/sessions'),
+    _TabItem(icon: Icons.chat_bubble_outline, activeIcon: Icons.chat_bubble, label: 'Messages', path: '/messages'),
     _TabItem(icon: Icons.person_outline, activeIcon: Icons.person, label: 'Profile', path: '/profile'),
   ];
 

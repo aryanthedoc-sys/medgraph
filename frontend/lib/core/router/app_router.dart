@@ -24,6 +24,8 @@ import '../../features/leaderboard/screens/leaderboard_screen.dart';
 import '../../features/search/screens/search_screen.dart';
 import '../../features/payments/screens/upgrade_screen.dart';
 import '../../features/profile/screens/edit_profile_screen.dart';
+import '../../features/messages/screens/messages_screen.dart';
+import '../../features/messages/screens/chat_thread_screen.dart';
 import '../../features/landing/screens/landing_screen.dart';
 import '../../features/landing/screens/about_screen.dart';
 import '../../features/landing/screens/blog_screen.dart';
@@ -118,6 +120,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/feed',        builder: (_, __) => const FeedScreen()),
           GoRoute(path: '/roulette',    builder: (_, __) => const RouletteScreen()),
           GoRoute(path: '/sessions',    builder: (_, __) => const SessionsScreen()),
+          GoRoute(path: '/messages',    builder: (_, __) => const MessagesScreen()),
           GoRoute(path: '/profile',     builder: (_, __) => const ProfileScreen()),
           GoRoute(path: '/leaderboard', builder: (_, __) => const LeaderboardScreen()),
           GoRoute(path: '/search',      builder: (_, __) => const SearchScreen()),
@@ -127,6 +130,14 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Full-screen screens (no bottom nav)
       GoRoute(path: '/profile/edit',   builder: (_, __) => const EditProfileScreen()),
+      GoRoute(
+        path: '/messages/:conversationId',
+        builder: (_, state) {
+          final convId = state.pathParameters['conversationId']!;
+          final partner = (state.extra as Map<String, dynamic>?) ?? {};
+          return ChatThreadScreen(conversationId: convId, partner: partner);
+        },
+      ),
       GoRoute(path: '/settings',         builder: (_, __) => const SettingsScreen()),
       GoRoute(path: '/settings/blocked', builder: (_, __) => const BlockedAccountsScreen()),
 
