@@ -36,6 +36,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
 
   // ── LiveKit ──────────────────────────────────────────────────────────────────
   final lk.Room _room = lk.Room();
+  lk.EventsListener<lk.RoomEvent>? _roomEvents;
   bool _connected    = false;
   bool _connecting   = true;
   String? _connectError;
@@ -76,6 +77,30 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
       return;
     }
     _room.addListener(_onRoomUpdate);
+    // Explicit typed event listeners — belt-and-suspenders for track subscriptions.
+    // Room.addListener (ChangeNotifier) covers most cases; these fire for the
+    // specific track events that update the remote video widget.
+    _roomEvents = _room.createListener()
+      ..on<lk.TrackSubscribedEvent>((e) {
+        // ignore: avoid_print
+        print('[VideoCallScreen] TrackSubscribed kind=${e.track.kind} participant=${e.participant.identity}');
+        if (mounted) setState(() {});
+      })
+      ..on<lk.TrackUnsubscribedEvent>((e) {
+        // ignore: avoid_print
+        print('[VideoCallScreen] TrackUnsubscribed kind=${e.track.kind}');
+        if (mounted) setState(() {});
+      })
+      ..on<lk.TrackPublishedEvent>((e) {
+        // ignore: avoid_print
+        print('[VideoCallScreen] TrackPublished participant=${e.participant.identity}');
+        if (mounted) setState(() {});
+      })
+      ..on<lk.ParticipantConnectedEvent>((e) {
+        // ignore: avoid_print
+        print('[VideoCallScreen] ParticipantConnected identity=${e.participant.identity}');
+        if (mounted) setState(() {});
+      });
     _startTimer();
     _scheduleOverlayHide();
     _listenSocket();
@@ -87,6 +112,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   void dispose() {
     _timer?.cancel();
     _overlayTimer?.cancel();
+    _roomEvents?.dispose();
     _room.removeListener(_onRoomUpdate);
     _room.disconnect();
     _room.dispose();

@@ -39,6 +39,14 @@
       border: 1px solid rgba(255,255,255,0.15); background: #2c2c2c; z-index: 10;
     }
     #local video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    #local-placeholder {
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 6px; color: rgba(255,255,255,0.3);
+    }
+    #local-placeholder svg { width: 28px; height: 28px; fill: rgba(255,255,255,0.3); }
+    #local-placeholder span { font-size: 10px; text-align: center; padding: 0 4px; }
 
     /* Controls bar */
     #controls {
@@ -74,14 +82,39 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     #connecting p { color: rgba(255,255,255,0.6); font-size: 15px; }
 
-    /* Error overlay */
+    /* Error overlay (connection failures only) */
     #error {
       position: absolute; inset: 0; background: #000;
       display: none; flex-direction: column; align-items: center;
       justify-content: center; gap: 12px; padding: 32px; z-index: 30;
     }
     #error p { color: rgba(255,255,255,0.7); font-size: 14px; text-align: center; }
-    #error button { border-radius: 8px; padding: 12px 24px; background: #DC2626; color: #fff; font-size: 14px; font-weight: 600; }
+    #error .btn-leave { border-radius: 8px; padding: 12px 24px; background: #DC2626; color: #fff; font-size: 14px; font-weight: 600; }
+
+    /* Camera warning banner (non-fatal, shown in the call UI) */
+    #cam-warn {
+      position: absolute; top: 70px; left: 16px; right: 16px;
+      background: rgba(220, 140, 0, 0.92);
+      border-radius: 10px; padding: 12px 14px;
+      display: none; flex-direction: column; gap: 8px;
+      z-index: 25;
+    }
+    #cam-warn-msg {
+      color: #fff; font-size: 13px; line-height: 1.4;
+    }
+    #cam-warn-actions {
+      display: flex; gap: 8px;
+    }
+    #btn-retry-cam {
+      border-radius: 6px; padding: 7px 14px;
+      background: rgba(255,255,255,0.25); color: #fff;
+      font-size: 12px; font-weight: 600;
+    }
+    #btn-dismiss-warn {
+      border-radius: 6px; padding: 7px 14px;
+      background: transparent; color: rgba(255,255,255,0.7);
+      font-size: 12px;
+    }
   </style>
 </head>
 <body>
@@ -93,7 +126,7 @@
 
 <div id="error">
   <p id="error-msg">Connection failed.</p>
-  <button onclick="hangup()">Leave</button>
+  <button class="btn-leave" onclick="hangup()">Leave</button>
 </div>
 
 <div id="remote">
@@ -104,7 +137,23 @@
   </div>
 </div>
 
-<div id="local"><div id="local-inner"></div></div>
+<div id="local">
+  <div id="local-inner">
+    <div id="local-placeholder">
+      <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+      <span>Camera off</span>
+    </div>
+  </div>
+</div>
+
+<!-- Camera permission warning — shown instead of killing the call -->
+<div id="cam-warn">
+  <div id="cam-warn-msg">Camera blocked. Click the lock or camera icon in your browser bar and allow access.</div>
+  <div id="cam-warn-actions">
+    <button id="btn-retry-cam">Enable Camera</button>
+    <button id="btn-dismiss-warn">Dismiss</button>
+  </div>
+</div>
 
 <div id="controls">
   <!-- Mic -->
@@ -152,6 +201,9 @@ function hangup() {
   const $waiting        = document.getElementById('waiting');
   const $remote         = document.getElementById('remote');
   const $localInner     = document.getElementById('local-inner');
+  const $localPH        = document.getElementById('local-placeholder');
+  const $camWarn        = document.getElementById('cam-warn');
+  const $camWarnMsg     = document.getElementById('cam-warn-msg');
 
   document.getElementById('waiting-avatar').textContent = name.charAt(0).toUpperCase();
   document.getElementById('waiting-name').textContent   = name;
@@ -169,7 +221,6 @@ function hangup() {
 
   let micOn = true, camOn = true, connected = false;
 
-  // Abort if connection takes more than 25 seconds (covers Render cold-start)
   const connectTimeout = setTimeout(() => {
     if (!connected) {
       console.error('[livekit] connection timed out after 25 s');
@@ -179,7 +230,6 @@ function hangup() {
     }
   }, 25000);
 
-  // Keep "Connecting…" text updated so users know we're still trying
   let dotCount = 0;
   const dotTimer = setInterval(() => {
     dotCount = (dotCount + 1) % 4;
@@ -192,9 +242,9 @@ function hangup() {
     $remote.querySelectorAll('video').forEach(v => v.remove());
     $waiting.style.display = 'none';
     $remote.appendChild(el);
+    console.log('[livekit] remote video attached');
   }
 
-  // Track audio elements for proper cleanup
   const audioElements = new Map();
 
   function attachAudio(track) {
@@ -209,6 +259,32 @@ function hangup() {
     const el = audioElements.get(track.sid);
     if (el) { el.remove(); audioElements.delete(track.sid); }
     track.detach();
+  }
+
+  function showCameraWarning(msg) {
+    $camWarnMsg.textContent = msg;
+    $camWarn.style.display = 'flex';
+  }
+
+  function hideCameraWarning() {
+    $camWarn.style.display = 'none';
+  }
+
+  async function enableLocalMedia() {
+    console.log('[livekit] requesting camera and microphone…');
+    try {
+      await room.localParticipant.enableCameraAndMicrophone();
+      console.log('[livekit] camera and microphone enabled');
+      hideCameraWarning();
+      // PiP attachment happens via LocalTrackPublished event below
+    } catch (e) {
+      console.error('[livekit] camera/mic enable failed:', e);
+      const isDenied = e && (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError' || e.name === 'SecurityError');
+      const msg = isDenied
+        ? 'Camera blocked — click the lock 🔒 or camera icon in your browser address bar and choose "Allow", then tap "Enable Camera".'
+        : 'Could not access camera/microphone: ' + (e && e.message ? e.message : String(e)) + '. Tap "Enable Camera" to retry.';
+      showCameraWarning(msg);
+    }
   }
 
   room
@@ -233,13 +309,18 @@ function hangup() {
       }
     })
     .on(RoomEvent.LocalTrackPublished, (pub) => {
-      // Attach local camera to PiP once the track is confirmed published
       if (pub.track && pub.source === Track.Source.Camera) {
         const el = pub.track.attach();
         el.style.cssText = 'width:100%;height:100%;object-fit:cover;transform:scaleX(-1);';
         $localInner.innerHTML = '';
         $localInner.appendChild(el);
         console.log('[livekit] local camera attached to PiP');
+      }
+    })
+    .on(RoomEvent.LocalTrackUnpublished, (pub) => {
+      if (pub.source === Track.Source.Camera) {
+        $localInner.innerHTML = '';
+        $localInner.appendChild($localPH);
       }
     })
     .on(RoomEvent.ParticipantDisconnected, () => {
@@ -255,6 +336,7 @@ function hangup() {
       console.log('[livekit] connection state=' + state);
     });
 
+  // ── Connect to room ────────────────────────────────────────────────────────
   try {
     console.log('[livekit] connecting to ' + wsUrl);
     await room.connect(wsUrl, token);
@@ -263,7 +345,7 @@ function hangup() {
     clearInterval(dotTimer);
     console.log('[livekit] connected, localParticipant=' + room.localParticipant.identity);
 
-    // Handle participants already in the room when we joined
+    // Attach tracks from participants already in the room when we joined
     for (const [, participant] of room.remoteParticipants) {
       for (const [, pub] of participant.trackPublications) {
         if (pub.isSubscribed && pub.track) {
@@ -273,11 +355,7 @@ function hangup() {
       }
     }
 
-    // enableCameraAndMicrophone publishes both tracks; PiP attachment
-    // happens via LocalTrackPublished event listener above (avoids race).
-    await room.localParticipant.enableCameraAndMicrophone();
-    console.log('[livekit] camera and microphone enabled');
-
+    // Show the call UI immediately after connecting — don't wait for camera.
     $connecting.style.display = 'none';
 
   } catch (e) {
@@ -287,7 +365,19 @@ function hangup() {
     $connecting.style.display = 'none';
     $error.style.display = 'flex';
     $errorMsg.textContent = 'Connection failed: ' + (e && e.message ? e.message : String(e));
+    return; // Stop here — no point trying to enable camera if not connected
   }
+
+  // ── Enable camera/mic — non-fatal; shows a warning banner on failure ───────
+  await enableLocalMedia();
+
+  // ── Controls ───────────────────────────────────────────────────────────────
+  document.getElementById('btn-retry-cam').onclick = async () => {
+    hideCameraWarning();
+    await enableLocalMedia();
+  };
+
+  document.getElementById('btn-dismiss-warn').onclick = () => hideCameraWarning();
 
   document.getElementById('btn-mic').onclick = async () => {
     micOn = !micOn;
@@ -305,8 +395,13 @@ function hangup() {
     camOn = !camOn;
     try {
       await room.localParticipant.setCameraEnabled(camOn);
+      if (camOn) hideCameraWarning();
     } catch (e) {
       console.error('[livekit] setCameraEnabled failed:', e);
+      if (camOn) {
+        camOn = false;
+        showCameraWarning('Could not enable camera. Check browser permissions and tap "Enable Camera".');
+      }
     }
     document.getElementById('ico-cam').style.display     = camOn ? '' : 'none';
     document.getElementById('ico-cam-off').style.display = camOn ? 'none' : '';
