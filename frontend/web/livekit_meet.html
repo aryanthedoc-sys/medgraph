@@ -133,9 +133,8 @@
   </button>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.5.0/dist/livekit-client.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.19.0/dist/livekit-client.umd.js"></script>
 <script>
-// Notify the Flutter parent frame to navigate away.
 function hangup() {
   window.parent.postMessage({ type: 'livekit-hangup' }, '*');
 }
@@ -146,12 +145,13 @@ function hangup() {
   const token   = p.get('token');
   const name    = p.get('name') || 'Partner';
 
-  const $connecting = document.getElementById('connecting');
-  const $error      = document.getElementById('error');
-  const $errorMsg   = document.getElementById('error-msg');
-  const $waiting    = document.getElementById('waiting');
-  const $remote     = document.getElementById('remote');
-  const $localInner = document.getElementById('local-inner');
+  const $connecting     = document.getElementById('connecting');
+  const $connectingText = document.getElementById('connecting-text');
+  const $error          = document.getElementById('error');
+  const $errorMsg       = document.getElementById('error-msg');
+  const $waiting        = document.getElementById('waiting');
+  const $remote         = document.getElementById('remote');
+  const $localInner     = document.getElementById('local-inner');
 
   document.getElementById('waiting-avatar').textContent = name.charAt(0).toUpperCase();
   document.getElementById('waiting-name').textContent   = name;
@@ -159,7 +159,8 @@ function hangup() {
   if (!wsUrl || !token) {
     $connecting.style.display = 'none';
     $error.style.display = 'flex';
-    $errorMsg.textContent = 'Missing connection parameters.';
+    $errorMsg.textContent = 'Missing connection parameters — please try again.';
+    console.error('[livekit] missing wsUrl or token in iframe params');
     return;
   }
 
@@ -167,6 +168,23 @@ function hangup() {
   const room = new Room({ adaptiveStream: true, dynacast: true });
 
   let micOn = true, camOn = true, connected = false;
+
+  // Abort if connection takes more than 25 seconds (covers Render cold-start)
+  const connectTimeout = setTimeout(() => {
+    if (!connected) {
+      console.error('[livekit] connection timed out after 25 s');
+      $connecting.style.display = 'none';
+      $error.style.display = 'flex';
+      $errorMsg.textContent = 'Connection timed out. The server may be warming up — please try again in a moment.';
+    }
+  }, 25000);
+
+  // Keep "Connecting…" text updated so users know we're still trying
+  let dotCount = 0;
+  const dotTimer = setInterval(() => {
+    dotCount = (dotCount + 1) % 4;
+    $connectingText.textContent = 'Connecting' + '.'.repeat(dotCount);
+  }, 600);
 
   function attachRemoteVideo(track) {
     const el = track.attach();
@@ -176,67 +194,108 @@ function hangup() {
     $remote.appendChild(el);
   }
 
+  // Track audio elements for proper cleanup
+  const audioElements = new Map();
+
+  function attachAudio(track) {
+    const el = track.attach();
+    el.setAttribute('autoplay', '');
+    el.setAttribute('playsinline', '');
+    document.body.appendChild(el);
+    audioElements.set(track.sid, el);
+  }
+
+  function detachAudio(track) {
+    const el = audioElements.get(track.sid);
+    if (el) { el.remove(); audioElements.delete(track.sid); }
+    track.detach();
+  }
+
   room
     .on(RoomEvent.TrackSubscribed, (track) => {
+      console.log('[livekit] TrackSubscribed kind=' + track.kind);
       if (track.kind === Track.Kind.Video) {
         attachRemoteVideo(track);
       } else if (track.kind === Track.Kind.Audio) {
-        document.body.appendChild(track.attach());
+        attachAudio(track);
       }
     })
     .on(RoomEvent.TrackUnsubscribed, (track) => {
-      track.detach();
-      if (track.kind === Track.Kind.Video) {
-        $waiting.style.display = 'flex';
-      }
-    })
-    .on(RoomEvent.ParticipantDisconnected, () => {
-      $remote.querySelectorAll('video').forEach(v => v.remove());
-      $waiting.style.display = 'flex';
-    })
-    .on(RoomEvent.Disconnected, () => {
-      if (connected) hangup();
-    });
-
-  try {
-    await room.connect(wsUrl, token);
-    connected = true;
-
-    // Handle participants who were already in the room when we joined
-    for (const [, participant] of room.remoteParticipants) {
-      for (const [, pub] of participant.trackPublications) {
-        if (pub.isSubscribed && pub.track) {
-          if (pub.track.kind === Track.Kind.Video) attachRemoteVideo(pub.track);
-          else if (pub.track.kind === Track.Kind.Audio) document.body.appendChild(pub.track.attach());
+      console.log('[livekit] TrackUnsubscribed kind=' + track.kind);
+      if (track.kind === Track.Kind.Audio) {
+        detachAudio(track);
+      } else {
+        track.detach();
+        if (track.kind === Track.Kind.Video) {
+          $remote.querySelectorAll('video').forEach(v => v.remove());
+          $waiting.style.display = 'flex';
         }
       }
-    }
-
-    await room.localParticipant.enableCameraAndMicrophone();
-
-    // Attach local camera to PiP
-    for (const [, pub] of room.localParticipant.trackPublications) {
+    })
+    .on(RoomEvent.LocalTrackPublished, (pub) => {
+      // Attach local camera to PiP once the track is confirmed published
       if (pub.track && pub.source === Track.Source.Camera) {
         const el = pub.track.attach();
         el.style.cssText = 'width:100%;height:100%;object-fit:cover;transform:scaleX(-1);';
         $localInner.innerHTML = '';
         $localInner.appendChild(el);
-        break;
+        console.log('[livekit] local camera attached to PiP');
+      }
+    })
+    .on(RoomEvent.ParticipantDisconnected, () => {
+      console.log('[livekit] remote participant disconnected');
+      $remote.querySelectorAll('video').forEach(v => v.remove());
+      $waiting.style.display = 'flex';
+    })
+    .on(RoomEvent.Disconnected, (reason) => {
+      console.log('[livekit] room disconnected reason=' + reason);
+      if (connected) hangup();
+    })
+    .on(RoomEvent.ConnectionStateChanged, (state) => {
+      console.log('[livekit] connection state=' + state);
+    });
+
+  try {
+    console.log('[livekit] connecting to ' + wsUrl);
+    await room.connect(wsUrl, token);
+    connected = true;
+    clearTimeout(connectTimeout);
+    clearInterval(dotTimer);
+    console.log('[livekit] connected, localParticipant=' + room.localParticipant.identity);
+
+    // Handle participants already in the room when we joined
+    for (const [, participant] of room.remoteParticipants) {
+      for (const [, pub] of participant.trackPublications) {
+        if (pub.isSubscribed && pub.track) {
+          if (pub.track.kind === Track.Kind.Video) attachRemoteVideo(pub.track);
+          else if (pub.track.kind === Track.Kind.Audio) attachAudio(pub.track);
+        }
       }
     }
+
+    // enableCameraAndMicrophone publishes both tracks; PiP attachment
+    // happens via LocalTrackPublished event listener above (avoids race).
+    await room.localParticipant.enableCameraAndMicrophone();
+    console.log('[livekit] camera and microphone enabled');
 
     $connecting.style.display = 'none';
 
   } catch (e) {
-    console.error('LiveKit connect error:', e);
+    clearTimeout(connectTimeout);
+    clearInterval(dotTimer);
+    console.error('[livekit] connect error:', e);
     $connecting.style.display = 'none';
     $error.style.display = 'flex';
-    $errorMsg.textContent = String(e);
+    $errorMsg.textContent = 'Connection failed: ' + (e && e.message ? e.message : String(e));
   }
 
   document.getElementById('btn-mic').onclick = async () => {
     micOn = !micOn;
-    await room.localParticipant.setMicrophoneEnabled(micOn);
+    try {
+      await room.localParticipant.setMicrophoneEnabled(micOn);
+    } catch (e) {
+      console.error('[livekit] setMicrophoneEnabled failed:', e);
+    }
     document.getElementById('ico-mic').style.display     = micOn ? '' : 'none';
     document.getElementById('ico-mic-off').style.display = micOn ? 'none' : '';
     document.getElementById('btn-mic').classList.toggle('off', !micOn);
@@ -244,7 +303,11 @@ function hangup() {
 
   document.getElementById('btn-cam').onclick = async () => {
     camOn = !camOn;
-    await room.localParticipant.setCameraEnabled(camOn);
+    try {
+      await room.localParticipant.setCameraEnabled(camOn);
+    } catch (e) {
+      console.error('[livekit] setCameraEnabled failed:', e);
+    }
     document.getElementById('ico-cam').style.display     = camOn ? '' : 'none';
     document.getElementById('ico-cam-off').style.display = camOn ? 'none' : '';
     document.getElementById('btn-cam').classList.toggle('off', !camOn);
